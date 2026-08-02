@@ -1,43 +1,114 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# ===============================================================
+# Dependencies
+# ===============================================================
 node_modules/
+.pnp
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
+# Note: package-lock.json SHOULD be committed. It pins exact dependency
+# versions so your machine and EAS Build resolve identical trees.
+
+# ===============================================================
 # Expo
+# ===============================================================
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
-.kotlin/
-*.orig.*
-*.jks
+# Native project folders. Expo regenerates these from app.json during
+# prebuild and EAS Build, so committing them causes merge conflicts and
+# stale native config. Delete these two lines only if you deliberately
+# move to the bare workflow and start hand-editing native code.
+/ios
+/android
+
+# Local EAS build artifacts
+eas-build-local-nodejs/
+*.ipa
+*.apk
+*.aab
+*.tar.gz
+
+# ===============================================================
+# Secrets and credentials
+# ===============================================================
+.env
+.env.*
+!.env.example
+
+# Apple and Google signing material. Any of these leaking lets someone
+# publish apps as you — treat it as a full credential rotation, not a
+# cleanup job.
 *.p8
 *.p12
+*.pem
 *.key
 *.mobileprovision
+*.cer
+*.certSigningRequest
+*.jks
+*.keystore
 
-# Metro
-.metro-health-check*
+# Firebase / Google service config
+google-services.json
+GoogleService-Info.plist
 
-# debug
+# EAS local credential cache
+credentials.json
+
+# ===============================================================
+# Logs and caches
+# ===============================================================
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
+pnpm-debug.*
+lerna-debug.*
+.metro-health-check*
 *.tsbuildinfo
+.eslintcache
+*.pid
+*.seed
+*.pid.lock
 
-app-example
+# ===============================================================
+# Editors and OS
+# ===============================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.idea/
+.history/
+*.swp
+*.swo
+*~
 
-# generated native folders
-/ios
-/android
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ===============================================================
+# Merge and patch artifacts
+# ===============================================================
+*.orig
+*.rej
+
+# ===============================================================
+# Testing and temp
+# ===============================================================
+coverage/
+.nyc_output/
+tmp/
+temp/
