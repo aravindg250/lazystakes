@@ -13,7 +13,10 @@ import Feather from "@expo/vector-icons/Feather";
 
 import { Card, Body, Caption, Label, Gap, styles } from "./primitives";
 import { useTheme, space, radius, type, hairline } from "../theme";
-import { WEEKDAY_INITIALS, formatMoney, type Weekday } from "../types";
+import { haptics } from "../lib/haptics";
+import {
+  WEEKDAY_INITIALS, MIN_STAKE_CENTS, MAX_STAKE_CENTS, formatMoney, type Weekday,
+} from "../types";
 
 const ALL_DAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 
@@ -27,6 +30,7 @@ export function DayPicker({
   const { c } = useTheme();
 
   const toggle = (d: Weekday) => {
+    haptics.tick();
     onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d].sort((a, b) => a - b));
   };
 
@@ -68,14 +72,15 @@ export function DayPicker({
 // ---------------------------------------------------------------
 // StakeStepper
 // ---------------------------------------------------------------
-// Stepped in $1 increments with a hard ceiling. The cap isn't a technical
-// limitation — it's a safety rail. The failure mode of these apps is
-// someone setting $200, getting sick for a week, and spiralling. A ceiling
-// plus free passes keeps it motivating rather than punishing, and keeps
-// your chargeback rate survivable.
+// Stepped in $1 increments with a hard ceiling (see MAX_STAKE_CENTS in
+// types). The cap isn't a technical limitation — it's a safety rail. The
+// failure mode of these apps is someone setting $200, getting sick for a
+// week, and spiralling. A ceiling plus free passes keeps it motivating
+// rather than punishing, and keeps your chargeback rate survivable.
+//
+// Haptics: a tick per step, and a firmer bump when a step lands on the
+// floor or the cap, so the limit can be felt without looking.
 
-export const MIN_STAKE_CENTS = 100;
-export const MAX_STAKE_CENTS = 5000;
 const PRESETS = [500, 1000, 2000];
 
 export function StakeStepper({
@@ -85,6 +90,8 @@ export function StakeStepper({
 
   const step = (delta: number) => {
     const next = Math.min(MAX_STAKE_CENTS, Math.max(MIN_STAKE_CENTS, value + delta));
+    if (next === MIN_STAKE_CENTS || next === MAX_STAKE_CENTS) haptics.bump();
+    else haptics.tick();
     onChange(next);
   };
 
@@ -107,7 +114,11 @@ export function StakeStepper({
           return (
             <Pressable
               key={p}
-              onPress={() => onChange(p)}
+              onPress={() => {
+                if (p === value) return;
+                haptics.tick();
+                onChange(p);
+              }}
               accessibilityRole="button"
               style={{
                 flex: 1,
@@ -126,7 +137,9 @@ export function StakeStepper({
       {atMax && (
         <>
           <Gap size={space.sm} />
-          <Caption>{formatMoney(MAX_STAKE_CENTS, false)} is the maximum stake.</Caption>
+          <Caption>
+            {formatMoney(MAX_STAKE_CENTS, false)} is the most you can stake on the honor system.
+          </Caption>
         </>
       )}
     </View>

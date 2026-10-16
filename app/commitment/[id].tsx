@@ -17,12 +17,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Screen, Card, Body, Caption, Button, StakeBlock, Gap, styles,
 } from "../../src/components/primitives";
+import { DetailSkeleton, ErrorState } from "../../src/components/states";
+import { DevFooter } from "../../src/dev/DevPanel";
+import { useMockQuery } from "../../src/dev/DevTools";
+import { haptics } from "../../src/lib/haptics";
 import { ScreenHeader, BackButton } from "../../src/components/chrome";
 import { DayStrip, StatRow, HistoryRow } from "../../src/components/commitment";
 import { useTheme, space } from "../../src/theme";
-import { formatSchedule, formatMoney } from "../../src/types";
+import { formatSchedule } from "../../src/types";
 import {
-  mockCommitments, historyFor, statsFor, groupByMonth,
+  mockCommitments, mockPaymentMethod, historyFor, statsFor, groupByMonth,
 } from "../../src/mock/data";
 
 export default function CommitmentDetailScreen() {
@@ -30,7 +34,28 @@ export default function CommitmentDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const commitment = mockCommitments.find((cm) => cm.id === id);
+  const query = useMockQuery(() => mockCommitments.find((cm) => cm.id === id) ?? null);
+
+  if (query.status !== "ready") {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
+        <Screen>
+          <ScreenHeader title="Commitment" left={<BackButton />} />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space.xxxl }}
+          >
+            {query.status === "loading"
+              ? <DetailSkeleton />
+              : <ErrorState onRetry={query.retry} />}
+            <DevFooter />
+          </ScrollView>
+        </Screen>
+      </SafeAreaView>
+    );
+  }
+
+  const commitment = query.data;
 
   if (!commitment) {
     return (
@@ -48,6 +73,7 @@ export default function CommitmentDetailScreen() {
   const paused = commitment.status === "paused";
 
   const confirmDelete = () => {
+    haptics.warning();
     Alert.alert(
       "Delete commitment?",
       "Your history stays, but nothing new will be scheduled and you won't be charged again.",
@@ -92,13 +118,20 @@ export default function CommitmentDetailScreen() {
           <Gap size={space.xl} />
 
           <Card>
-            <DetailRow label="Gym" value={commitment.venue?.name ?? "Anywhere"} first />
-            <DetailRow label="Verification" value="Health + QR" />
+            <DetailRow label="Proof" value="Honor system" first />
             <DetailRow label="Free passes" value={`${commitment.freePassesPerMonth} per month`} />
-            <DetailRow label="Card" value="Visa 4242" />
+            <DetailRow label="Card" value={`${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`} />
           </Card>
 
           <Gap size={space.xl} />
+
+          {months.length === 0 && (
+            <Card>
+              <Body tone="secondary">
+                No history yet. Each scheduled day shows up here once it has passed.
+              </Body>
+            </Card>
+          )}
 
           {months.map((group, gi) => (
             <View key={group.label}>
@@ -132,6 +165,8 @@ export default function CommitmentDetailScreen() {
 
           <Gap size={space.lg} />
           <Button label="Delete commitment" variant="ghost" onPress={confirmDelete} />
+
+          <DevFooter />
         </ScrollView>
       </Screen>
     </SafeAreaView>

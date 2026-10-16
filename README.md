@@ -1,50 +1,56 @@
-# Welcome to your Expo app 👋
+# LazyStakes
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Put money on the things you keep putting off. Pick a task, the days you'll do it, and what a miss costs ($1–$20). Mark it done before 11:59 pm, or your card is charged.
 
-## Get started
+The full product and technical spec lives in [`docs/specsheet.md`](docs/specsheet.md). Read it before changing behaviour — most of the rules that look arbitrary (the stake cap, no streaks, no red on pending money) are deliberate, and the spec says why.
 
-1. Install dependencies
+## Status
 
-   ```bash
-   npm install
-   ```
+The front end is built against mock data; there is no backend yet. Version 1 verifies every commitment on the honor system — you hold **Mark done** yourself. Location, photo, and AI-checked proof come in the final phase. See [Build phases](docs/specsheet.md#build-phases).
 
-2. Start the app
+## Running it
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Requires Node 20.19.4+ and the Expo Go app (SDK 57) on your phone.
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Scan the QR code with your iPhone camera (or the Expo Go app on Android).
 
-## Learn more
+Expo Go on iOS only supports the latest Expo SDK. If it says the project is incompatible, the project needs an SDK upgrade — see the [upgrade walkthrough](https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/).
 
-To learn more about developing your project with Expo, look at the following resources:
+### Environment
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Copy `.env.example` to `.env` (`copy .env.example .env` on Windows). Every `EXPO_PUBLIC_*` value is bundled into the app and readable by anyone, so only publishable keys belong there — the file explains which are which.
 
-## Join the community
+`EXPO_PUBLIC_SHOW_DEV_TOOLS` controls the preview controls. When it's unset they show in development and hide in production builds.
 
-Join our community of developers creating universal apps.
+### Dev tools
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+With dev tools on:
+
+- **Today** has pills to switch between the six day states (pending, kept, charged, free pass, rest day, no commitments).
+- Screens that load data have **Simulate data** pills to preview their loading and error states. The same control is in Settings.
+- **Settings → Preview screens** opens sign-in and onboarding.
+
+## Project layout
+
+```
+app/                   Screens (Expo Router, file-based routes)
+src/theme/tokens.ts    Every colour, font, and spacing value — the only file with hex codes
+src/components/        Primitives (StakeBlock, Card, Button…) and screen components
+src/types/             Types mirroring the database schema, money formatting, stake limits
+src/mock/data.ts       Mock commitments and history used until the backend exists
+src/dev/               Preview tools and useMockQuery (swapped for real API calls later)
+src/lib/haptics.ts     The app's haptic vocabulary
+docs/specsheet.md      Product and technical spec
+```
+
+## Checks
+
+```bash
+npx tsc --noEmit
+npx expo lint
+```

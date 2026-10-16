@@ -63,6 +63,16 @@ const light = {
   dotCharged: "#D64545",
   dotExcused: "#8B78E0",
   dotIdle: "#DEDBE4",
+
+  // Loading placeholders.
+  skeleton: "#E8E5EE",
+
+  // Fixed-colour controls. The Sign in with Apple button must be black on
+  // light backgrounds and white on dark ones (Apple's guideline), and the
+  // switch thumb stays white in both modes like the native control.
+  appleButtonBg: "#000000",
+  appleButtonFg: "#FFFFFF",
+  switchThumb: "#FFFFFF",
 };
 
 const dark = {
@@ -107,6 +117,12 @@ const dark = {
   dotCharged: "#E88B84",
   dotExcused: "#A992FF",
   dotIdle: "#3A3844",
+
+  skeleton: "#24232B",
+
+  appleButtonBg: "#FFFFFF",
+  appleButtonFg: "#000000",
+  switchThumb: "#FFFFFF",
 };
 
 export const palettes = { light, dark };

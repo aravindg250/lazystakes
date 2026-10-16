@@ -1,7 +1,7 @@
 /**
  * primitives.tsx — Block theme vocabulary.
  *
- * Nothing here knows about gyms or commitments. The one exception is
+ * Nothing here knows about commitments. The one exception is
  * StakeBlock, which is domain-shaped on purpose: it's the signature
  * element of the whole design and deserves to live at the primitive layer
  * so its state-to-colour mapping is defined exactly once.
@@ -12,8 +12,10 @@ import {
   View, Text as RNText, Pressable, StyleSheet,
   type ViewStyle, type TextStyle, type StyleProp,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import { useTheme, space, radius, type, hairline, tabularNums } from "../theme";
 import { formatMoney } from "../types";
+import { haptics } from "../lib/haptics";
 
 // ---------------------------------------------------------------
 // Text
@@ -62,12 +64,24 @@ export const MoneySm = makeText({ ...type.moneySm, ...tabularNums }, "secondary"
 // ---------------------------------------------------------------
 // StakeBlock — the signature element
 // ---------------------------------------------------------------
-// One shape, four meanings. The layout never changes between states, only
-// the fill does, so a card doesn't reflow when a workout gets verified.
+// One shape, five meanings. The layout never changes between states, only
+// the fill does, so a card doesn't reflow when a day is marked done. The
+// fill fades between states rather than snapping — a state change, not a
+// screen replacement.
 //
 // "Kept" rather than a strikethrough is deliberate: the money is still $5,
 // you simply didn't lose it. Framing the good outcome as a retained amount
 // rather than a cancelled charge is the whole emotional point of the app.
+
+const FADE_BG = {
+  transitionProperty: "backgroundColor",
+  transitionDuration: 250,
+} as const;
+
+const FADE_COLOR = {
+  transitionProperty: "color",
+  transitionDuration: 250,
+} as const;
 
 export type StakeState = "pending" | "kept" | "charged" | "excused" | "idle";
 
@@ -100,19 +114,20 @@ export function StakeBlock({
   const moneyStyle = size === "hero" ? type.moneyHero : type.moneyLg;
 
   return (
-    <View style={{
+    <Animated.View style={{
       backgroundColor: fills.bg,
       borderRadius: radius.block,
       paddingVertical: size === "hero" ? space.lg : space.md,
       paddingHorizontal: space.lg,
+      ...FADE_BG,
     }}>
-      <RNText style={[type.caption, { color: fills.label, marginBottom: space.xs }]}>
+      <Animated.Text style={[type.caption, { color: fills.label, marginBottom: space.xs }, FADE_COLOR]}>
         {labelOverride ?? STATE_LABELS[state]}
-      </RNText>
-      <RNText style={[moneyStyle, tabularNums, { color: fills.fg }]}>
+      </Animated.Text>
+      <Animated.Text style={[moneyStyle, tabularNums, { color: fills.fg }, FADE_COLOR]}>
         {formatMoney(amountCents, false)}
-      </RNText>
-    </View>
+      </Animated.Text>
+    </Animated.View>
   );
 }
 
@@ -253,7 +268,11 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={opt.value}
-            onPress={() => onChange(opt.value)}
+            onPress={() => {
+              if (active) return;
+              haptics.tick();
+              onChange(opt.value);
+            }}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             style={{

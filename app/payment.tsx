@@ -15,7 +15,6 @@
 import React from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 
 import {
@@ -23,15 +22,17 @@ import {
 } from "../src/components/primitives";
 import { ScreenHeader, BackButton } from "../src/components/chrome";
 import { Section, InfoRow } from "../src/components/settings";
-import { useTheme, space, radius, hairline } from "../src/theme";
+import { RowsSkeleton, ErrorState } from "../src/components/states";
+import { DevFooter } from "../src/dev/DevPanel";
+import { useMockQuery } from "../src/dev/DevTools";
+import { useTheme, space, hairline } from "../src/theme";
 import { formatMoney } from "../src/types";
 import { mockPaymentMethod, allCharges } from "../src/mock/data";
 
 export default function PaymentScreen() {
   const { c } = useTheme();
-  const router = useRouter();
-
-  const charges = allCharges();
+  const query = useMockQuery(allCharges);
+  const charges = query.data ?? [];
   const totalCents = charges.reduce((sum, x) => sum + x.checkIn.stakeCents, 0);
 
   return (
@@ -72,25 +73,33 @@ export default function PaymentScreen() {
 
           <Gap size={space.xl} />
 
-          <StakeBlock
-            state="charged"
-            amountCents={totalCents}
-            labelOverride="Paid in missed days, all time"
-          />
-
-          <Gap size={space.xl} />
-
-          {charges.length === 0 ? (
+          {query.status === "loading" ? (
+            <RowsSkeleton rows={3} />
+          ) : query.status === "error" ? (
+            <ErrorState
+              title="Couldn't load your charges"
+              message="Check your connection and try again. This only affects what's shown here — nothing has been charged or refunded."
+              onRetry={query.retry}
+            />
+          ) : charges.length === 0 ? (
             <Card>
               <Body>No charges yet</Body>
               <Gap size={space.sm} />
               <Body tone="secondary">
-                You haven't missed a day. Charges show up here with the date and
-                the commitment they came from.
+                {"You haven't missed a day. Charges show up here with the date and " +
+                  "the commitment they came from."}
               </Body>
             </Card>
           ) : (
             <>
+              <StakeBlock
+                state="charged"
+                amountCents={totalCents}
+                labelOverride="Paid in missed days, all time"
+              />
+
+              <Gap size={space.xl} />
+
               <Caption>Charge history</Caption>
               <Gap size={space.sm} />
               <Card padding={0} style={{ paddingHorizontal: space.lg }}>
@@ -113,11 +122,13 @@ export default function PaymentScreen() {
 
           <Section
             label="Billing"
-            footnote="Charges appear on your statement as GYMSTAKES. If something looks wrong, contact support before disputing it with your bank — we can usually sort it out same day."
+            footnote="Charges appear on your statement as LAZYSTAKES. If something looks wrong, contact support before disputing it with your bank — we can usually sort it out same day."
           >
-            <InfoRow label="Descriptor" value="GYMSTAKES" />
+            <InfoRow label="Descriptor" value="LAZYSTAKES" />
             <InfoRow label="Currency" value="USD" divider={false} />
           </Section>
+
+          <DevFooter />
         </ScrollView>
       </Screen>
     </SafeAreaView>

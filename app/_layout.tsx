@@ -11,6 +11,7 @@ import {
 } from "@expo-google-fonts/space-grotesk";
 
 import { ThemeProvider, useTheme } from "../src/theme";
+import { DevProvider } from "../src/dev/DevTools";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,7 +32,9 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <ThemedStack />
+      <DevProvider>
+        <ThemedStack />
+      </DevProvider>
     </ThemeProvider>
   );
 }

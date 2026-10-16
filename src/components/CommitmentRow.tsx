@@ -9,7 +9,7 @@
 import React from "react";
 import { View } from "react-native";
 import {
-  Card, Body, Caption, MoneySm, StatusDot, PressableRow, Hairline, Gap, styles,
+  Card, Body, Caption, MoneySm, StatusDot, PressableRow, Gap,
 } from "./primitives";
 import { useTheme, space, hairline } from "../theme";
 import {
@@ -31,7 +31,7 @@ export function CommitmentRow({ commitment, checkIn, showDivider = true, onPress
   const isoDay = (weekday === 0 ? 7 : weekday) as Weekday;
 
   const statusText = {
-    pending: "pending", verified: "verified", missed: "charged",
+    pending: "due today", verified: "kept", missed: "charged",
     excused: "free pass", upcoming: "upcoming",
   }[checkIn.status];
 
@@ -110,7 +110,7 @@ export function EmptyState({ onCreate }: { onCreate?: () => void }) {
       <Body>Set your first commitment</Body>
       <Gap size={space.sm} />
       <Body tone="secondary">
-        Pick the days you'll show up and what you'll pay if you don't.
+        {"Pick something you keep putting off, the days you'll do it, and what you'll pay if you don't."}
       </Body>
       <Gap size={space.xl} />
       <PressableRow onPress={onCreate}>

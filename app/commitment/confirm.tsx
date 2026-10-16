@@ -24,13 +24,15 @@ import {
 } from "../../src/components/primitives";
 import { ScreenHeader, BackButton } from "../../src/components/chrome";
 import { useTheme, space, radius } from "../../src/theme";
+import { haptics } from "../../src/lib/haptics";
+import { mockPaymentMethod } from "../../src/mock/data";
 import { formatMoney, formatSchedule, type Weekday } from "../../src/types";
 
 export default function ConfirmCommitmentScreen() {
   const { c } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{
-    title: string; days: string; stakeCents: string; venueName: string;
+    title: string; days: string; stakeCents: string;
   }>();
 
   const [agreed, setAgreed] = useState(false);
@@ -38,11 +40,14 @@ export default function ConfirmCommitmentScreen() {
   const title = params.title ?? "Go to the gym";
   const days = (params.days ?? "").split(",").filter(Boolean).map(Number) as Weekday[];
   const stakeCents = Number(params.stakeCents ?? 500);
-  const venueName = params.venueName || null;
+  const card = `${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`;
 
+  // Load-bearing wording: this exact string plus a timestamp is the consent
+  // record sent to Stripe in a dispute. It names the amount, the trigger,
+  // the schedule, and the card.
   const consentText =
-    `I authorise Gymstakes to charge ${formatMoney(stakeCents)} to my card ` +
-    `each ${formatSchedule(days).toLowerCase()} that I don't verify "${title}" by 11:59 pm.`;
+    `I authorise LazyStakes to charge ${formatMoney(stakeCents)} to my ${card} ` +
+    `each ${formatSchedule(days).toLowerCase()} that I don't mark "${title}" done by 11:59 pm.`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -71,20 +76,25 @@ export default function ConfirmCommitmentScreen() {
             <SummaryRow label="Days per week" value={String(days.length)} first />
             <SummaryRow label="Deadline" value="11:59 pm" />
             <SummaryRow label="Free passes" value="1 per month" />
-            {venueName ? <SummaryRow label="Gym" value={venueName} /> : null}
-            <SummaryRow label="Card" value="Visa 4242" />
+            <SummaryRow label="Proof" value="Honor system" />
+            <SummaryRow label="Card" value={card} />
           </Card>
 
           <Gap size={space.xl} />
 
-          <Caption>What you're agreeing to</Caption>
+          <Caption>{"What you're agreeing to"}</Caption>
           <Gap size={space.sm} />
           <Card>
             <Body tone="secondary">{consentText}</Body>
             <Gap size={space.md} />
             <Body tone="secondary">
-              Charges happen automatically at the deadline. You'll get a reminder
-              at 6 pm and a final warning at 10 pm on every day that's due.
+              {"Charges happen automatically at the deadline. You'll get a reminder " +
+                "at 6 pm and a final warning at 10 pm on every day that's due."}
+            </Body>
+            <Gap size={space.md} />
+            <Body tone="secondary">
+              {"Marking a day done is on your honor. You can undo it until 11:59 pm " +
+                "that day, but not after."}
             </Body>
             <Gap size={space.md} />
             <Hairline />
@@ -97,7 +107,10 @@ export default function ConfirmCommitmentScreen() {
 
           <Gap size={space.lg} />
 
-          <ConsentCheckbox checked={agreed} onToggle={() => setAgreed((v) => !v)} />
+          <ConsentCheckbox
+            checked={agreed}
+            onToggle={() => { haptics.tick(); setAgreed((v) => !v); }}
+          />
 
           <Gap size={space.xl} />
 
@@ -109,7 +122,7 @@ export default function ConfirmCommitmentScreen() {
           />
           <Gap size={space.sm} />
           <Caption style={{ textAlign: "center" }}>
-            Your first charge can't happen before tomorrow.
+            {"Your first charge can't happen before tomorrow."}
           </Caption>
         </ScrollView>
       </Screen>
@@ -169,7 +182,7 @@ function ConsentCheckbox({
         {checked && <Feather name="check" size={14} color={c.onAccent} />}
       </View>
       <Body style={{ flex: 1 }} tone={checked ? "accent" : "secondary"}>
-        I understand I'll be charged when I miss a day.
+        {"I understand I'll be charged when I miss a day."}
       </Body>
     </Pressable>
   );

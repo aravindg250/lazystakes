@@ -10,7 +10,7 @@
  * worst case in plain money before anyone commits to anything.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -18,11 +18,10 @@ import { useRouter } from "expo-router";
 import { Screen, Body, Caption, Button, Gap, Sunken, styles } from "../../src/components/primitives";
 import { ScreenHeader, BackButton } from "../../src/components/chrome";
 import {
-  DayPicker, StakeStepper, FieldGroup, TextField, NavRow,
+  DayPicker, StakeStepper, FieldGroup, TextField,
 } from "../../src/components/form";
 import { useTheme, space } from "../../src/theme";
 import { formatMoney, formatSchedule, type Weekday } from "../../src/types";
-import { mockVenues } from "../../src/mock/data";
 
 export default function NewCommitmentScreen() {
   const { c } = useTheme();
@@ -31,9 +30,7 @@ export default function NewCommitmentScreen() {
   const [title, setTitle] = useState("Go to the gym");
   const [days, setDays] = useState<Weekday[]>([1, 3, 5]);
   const [stakeCents, setStakeCents] = useState(500);
-  const [venueId, setVenueId] = useState<string | null>(mockVenues[0].id);
 
-  const venue = mockVenues.find((v) => v.id === venueId) ?? null;
   const valid = title.trim().length > 0 && days.length > 0;
 
   // Worst case per week, and per month with free passes accounted for.
@@ -47,7 +44,6 @@ export default function NewCommitmentScreen() {
         title: title.trim(),
         days: days.join(","),
         stakeCents: String(stakeCents),
-        venueName: venue?.name ?? "",
       },
     });
   };
@@ -66,7 +62,7 @@ export default function NewCommitmentScreen() {
             <TextField
               value={title}
               onChangeText={setTitle}
-              placeholder="Go to the gym"
+              placeholder="Go to the gym, buy groceries, email Sam…"
             />
           </FieldGroup>
 
@@ -88,23 +84,10 @@ export default function NewCommitmentScreen() {
             <StakeStepper value={stakeCents} onChange={setStakeCents} />
           </FieldGroup>
 
-          <Gap size={space.xl} />
-
-          <FieldGroup
-            label="How you'll prove it"
-            hint="Apple Watch workouts verify on their own. The QR check-in is a manual backup."
-          >
-            <NavRow
-              label="Gym"
-              value={venue?.name}
-              showDivider
-              onPress={() => {
-                const i = mockVenues.findIndex((v) => v.id === venueId);
-                setVenueId(mockVenues[(i + 1) % mockVenues.length].id);
-              }}
-            />
-            <NavRow label="Verification" value="Health + QR" />
-          </FieldGroup>
+          <Gap size={space.md} />
+          <Caption>
+            On the honor system: you mark each day done yourself, any time before 11:59 pm.
+          </Caption>
 
           <Gap size={space.xl} />
 

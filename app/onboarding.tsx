@@ -18,9 +18,12 @@ import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 
 import {
-  Screen, Title, Body, Caption, Button, Card, Gap, StakeBlock,
+  Screen, Title, Body, Button, Card, Gap, StakeBlock,
 } from "../src/components/primitives";
 import { useTheme, space, radius } from "../src/theme";
+import { formatMoney, MAX_STAKE_CENTS } from "../src/types";
+
+const CAP = formatMoney(MAX_STAKE_CENTS, false);
 
 type Step = {
   title: string;
@@ -31,19 +34,19 @@ type Step = {
 const STEPS: Step[] = [
   {
     title: "You set the stakes",
-    body: "Choose the days you're committing to and how much a miss costs you. Anywhere from $1 to $50.",
+    body: `Pick what you keep putting off, the days you'll do it, and how much a miss costs you. Anywhere from $1 to ${CAP}.`,
     points: [
-      { icon: "calendar", text: "Pick your days — Monday, Wednesday, Friday, whatever fits" },
+      { icon: "calendar", text: "The gym, the grocery run, that email — Monday, Wednesday, Friday, whatever fits" },
       { icon: "dollar-sign", text: "Set what a miss costs. Raise it later if it stops stinging" },
       { icon: "clock", text: "Every day runs until 11:59 pm your time" },
     ],
   },
   {
-    title: "Your watch does the proving",
-    body: "A logged workout verifies the day automatically. No photos, no forms, nothing to remember.",
+    title: "You mark it done",
+    body: "When you've done it, hold Mark done on the Today screen. No photos, no forms — it's on your honor.",
     points: [
-      { icon: "activity", text: "Apple Watch and iPhone workouts verify on their own" },
-      { icon: "maximize", text: "Scan the QR code at your gym as a manual backup" },
+      { icon: "check-circle", text: "Mark it done before 11:59 pm. It has to reach us in time, so don't leave it to the last second" },
+      { icon: "rotate-ccw", text: "Marked it by mistake? Undo any time before the deadline" },
       { icon: "bell", text: "You'll get a nudge at 6 pm and a final warning at 10 pm" },
     ],
   },
@@ -52,7 +55,7 @@ const STEPS: Step[] = [
     body: "This is meant to motivate you, not to punish you for having a bad week.",
     points: [
       { icon: "shield", text: "One free pass a month, applied automatically" },
-      { icon: "trending-up", text: "Stakes cap at $50 per miss" },
+      { icon: "trending-up", text: `Stakes cap at ${CAP} per miss` },
       { icon: "pause-circle", text: "Pause or delete a commitment any time" },
     ],
   },

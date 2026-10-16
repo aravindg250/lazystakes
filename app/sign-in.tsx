@@ -22,7 +22,7 @@ import { Screen, Title, Body, Caption, Gap, StakeBlock } from "../src/components
 import { useTheme, space, radius, type } from "../src/theme";
 
 export default function SignInScreen() {
-  const { c, isDark } = useTheme();
+  const { c } = useTheme();
   const router = useRouter();
 
   return (
@@ -32,8 +32,8 @@ export default function SignInScreen() {
           <Title>Put money on it.</Title>
           <Gap size={space.md} />
           <Body tone="secondary">
-            Pick the days you'll show up. Miss one, and you pay what you said
-            you'd pay.
+            {"Pick what you keep putting off and the days you'll do it. Miss one, " +
+              "and you pay what you said you'd pay."}
           </Body>
 
           <Gap size={space.xxl} />
@@ -54,9 +54,9 @@ export default function SignInScreen() {
 }
 
 function AppleSignInButton({ onPress }: { onPress: () => void }) {
-  const { isDark } = useTheme();
-  const bg = isDark ? "#FFFFFF" : "#000000";
-  const fg = isDark ? "#000000" : "#FFFFFF";
+  const { c } = useTheme();
+  const bg = c.appleButtonBg;
+  const fg = c.appleButtonFg;
 
   return (
     <Pressable

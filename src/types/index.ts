@@ -14,22 +14,18 @@ export type CheckInStatus =
   | "excused"    // no proof, free pass used
   | "upcoming";  // scheduled, not today
 
-export type EvidenceKind = "healthkit_workout" | "qr_scan" | "geofence_dwell";
-
-export type Venue = {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  radiusM: number;
-};
+/**
+ * v1 is honor system only: the user marks the day done themselves.
+ * Location, photo, and HealthKit kinds join this union in the final
+ * verification phase without changing anything else here.
+ */
+export type EvidenceKind = "self_report";
 
 export type Commitment = {
   id: string;
   title: string;
   scheduleDays: Weekday[];
   stakeCents: number;
-  venue: Venue | null;
   deadlineLocalTime: string;   // "23:59"
   freePassesPerMonth: number;
   status: "active" | "paused" | "archived";
@@ -38,9 +34,7 @@ export type Commitment = {
 
 export type Evidence = {
   kind: EvidenceKind;
-  receivedAt: string;
-  durationSec?: number;
-  activityType?: string;
+  receivedAt: string;          // server_received_at — the only time that counts
 };
 
 export type CheckIn = {
@@ -52,6 +46,16 @@ export type CheckIn = {
   stakeCents: number;
   evidence: Evidence | null;
 };
+
+// ---------------------------------------------------------------
+// Stake limits
+// ---------------------------------------------------------------
+// A safety rail, not a technical limit. Honor-system stakes cap at $20:
+// above that, the temptation to tap "done" anyway outweighs the motivation.
+// Verified proof types raise the ceiling to $50 in the final phase.
+
+export const MIN_STAKE_CENTS = 100;
+export const MAX_STAKE_CENTS = 2000;
 
 // ---------------------------------------------------------------
 // Formatting helpers
@@ -83,7 +87,14 @@ export function formatSchedule(days: Weekday[]): string {
   return sorted.map((d) => WEEKDAY_LABELS[d]).join(", ");
 }
 
-/** "6 hr 31 min" — deliberately not a ticking countdown. See note in Part 2. */
+/** "6:42 pm" — for "Marked done 6:42 pm" and similar. */
+export function formatClockTime(iso: string): string {
+  return new Date(iso)
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    .toLowerCase();
+}
+
+/** "6 hr 31 min" — deliberately not a ticking countdown. */
 export function formatTimeRemaining(deadlineAt: string, now = new Date()): string {
   const ms = new Date(deadlineAt).getTime() - now.getTime();
   if (ms <= 0) return "past deadline";

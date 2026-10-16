@@ -12,19 +12,23 @@ import { useRouter } from "expo-router";
 
 import { Title, Caption } from "./primitives";
 import { useTheme, space, radius } from "../theme";
+import { haptics } from "../lib/haptics";
 
 /**
  * A single tap flips light and dark. It intentionally leaves "system" —
  * once someone reaches for this control they've expressed a preference,
  * and silently snapping back to the OS setting later would feel broken.
- * System stays reachable from Settings in Part 5.
+ * System stays reachable from Settings.
  */
 export function ThemeToggleButton() {
   const { c, isDark, setMode } = useTheme();
 
   return (
     <Pressable
-      onPress={() => setMode(isDark ? "light" : "dark")}
+      onPress={() => {
+        haptics.tick();
+        setMode(isDark ? "light" : "dark");
+      }}
       accessibilityRole="button"
       accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
       hitSlop={8}

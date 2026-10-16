@@ -12,13 +12,15 @@
  */
 
 import React, { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { Screen, Caption, Gap, Segmented } from "../src/components/primitives";
 import { ScreenHeader, BackButton } from "../src/components/chrome";
 import { Section, SettingsRow, ToggleRow, InfoRow, CustomRow } from "../src/components/settings";
+import { DataStatePills } from "../src/dev/DevPanel";
+import { SHOW_DEV_TOOLS } from "../src/dev/DevTools";
 import { useTheme, space, type ThemeMode } from "../src/theme";
 import { mockPaymentMethod, mockAccount } from "../src/mock/data";
 
@@ -29,7 +31,6 @@ export default function SettingsScreen() {
   const [remind6pm, setRemind6pm] = useState(true);
   const [warn10pm, setWarn10pm] = useState(true);
   const [receipts, setReceipts] = useState(true);
-  const [healthConnected, setHealthConnected] = useState(true);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -83,7 +84,7 @@ export default function SettingsScreen() {
             />
             <ToggleRow
               label="Final warning"
-              hint="10 pm, only if the day isn't verified yet"
+              hint="10 pm, only if the day isn't marked done yet"
               value={warn10pm}
               onChange={setWarn10pm}
             />
@@ -92,21 +93,6 @@ export default function SettingsScreen() {
               hint="A notification whenever you're charged"
               value={receipts}
               onChange={setReceipts}
-              divider={false}
-            />
-          </Section>
-
-          <Gap size={space.xl} />
-
-          <Section
-            label="Verification"
-            footnote="Without Health access, you'll need to scan a QR code to verify every day."
-          >
-            <ToggleRow
-              label="Apple Health"
-              hint="Reads workouts so days verify automatically"
-              value={healthConnected}
-              onChange={setHealthConnected}
               divider={false}
             />
           </Section>
@@ -136,14 +122,20 @@ export default function SettingsScreen() {
 
           <Gap size={space.xl} />
 
-          <Caption>Preview screens</Caption>
-          <Gap size={space.sm} />
-          <Section>
-            <SettingsRow label="Sign in" onPress={() => router.push("/sign-in")} />
-            <SettingsRow label="Onboarding" onPress={() => router.push("/onboarding")} divider={false} />
-          </Section>
+          {SHOW_DEV_TOOLS && (
+            <>
+              <Caption>Preview screens</Caption>
+              <Gap size={space.sm} />
+              <Section>
+                <SettingsRow label="Sign in" onPress={() => router.push("/sign-in")} />
+                <SettingsRow label="Onboarding" onPress={() => router.push("/onboarding")} divider={false} />
+              </Section>
+              <Gap size={space.lg} />
+              <DataStatePills />
+              <Gap size={space.lg} />
+            </>
+          )}
 
-          <Gap size={space.lg} />
           <Caption style={{ textAlign: "center" }}>Version 0.1.0</Caption>
         </ScrollView>
       </Screen>

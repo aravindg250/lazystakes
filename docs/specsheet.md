@@ -18,17 +18,19 @@ Commitments are any recurring task, not just workouts. Version 1 verifies everyt
 
 Front end is built against mock data, no backend wired. Five of six planned UI phases are complete: theme system, today screen, commitment creation with consent capture, commitments list and detail, and the perimeter screens (sign-in, onboarding, settings, payment). The project is on Expo SDK 57.
 
-The current screens were built for the earlier gym-and-HealthKit direction. They need a pass to match the honor-system v1 — "Log workout" becomes "Mark done", HealthKit and QR copy comes out, the stake cap drops to $20 — alongside a layout rework that is still being designed.
+Phase 1 is complete apart from the layout rework, which is still being designed. The screens match the honor-system v1 (hold to mark done, undo until the deadline, $20 cap), and every data screen has loading, error, and empty states that can be previewed with the dev tools.
 
 | Area | State |
 | --- | --- |
 | Design system (Block theme, light + dark) | Built |
-| Today screen, all six states | Built, copy needs honor-system pass |
-| Create and confirm flow | Built, copy and stake cap need honor-system pass |
+| Today screen, all six states | Built — hold to mark done, undo |
+| Create and confirm flow | Built — $1–$20 stakes |
 | Commitments list and detail with history | Built |
-| Sign-in, onboarding, settings, payment | Built, onboarding and settings need honor-system pass |
+| Sign-in, onboarding, settings, payment | Built |
+| Honor-system copy pass | Done |
+| Polish (haptics, state transitions, loading, errors, empty states) | Done |
 | Layout rework | Being designed |
-| Polish pass (transitions, haptics, loading, errors) | Not started |
+| Dark mode visual audit | Not done — needs a device pass |
 | Postgres schema | Not in repo — to be written |
 | Scheduler and Stripe service | Not in repo — to be written |
 | Auth | Not started |
@@ -50,7 +52,7 @@ Four objects carry the whole product. Getting these right matters more than any 
 
 **Check-in** — one commitment on one calendar day. Created in advance by the scheduler, not computed at midnight. Carries its own snapshot of the stake, so raising your stake never rewrites what past days cost you.
 
-**Evidence** — a reason a check-in was verified. In v1 the only kind is a self-report: the user tapped "Mark done". Kept as its own table, separate from the check-in, so the location, photo, and other proof types in the final phase slot in without a migration, and one day can accumulate several signals.
+**Evidence** — a reason a check-in was verified. In v1 the only kind is a self-report: the user held "Mark done". A self-report can be withdrawn (undone) until the deadline; withdrawal sets `withdrawn_at` rather than deleting the row, so the audit trail survives. Kept as its own table, separate from the check-in, so the location, photo, and other proof types in the final phase slot in without a migration, and one day can accumulate several signals.
 
 **Charge** — a Stripe payment tied to exactly one missed check-in. One-to-one, enforced by a unique constraint.
 
@@ -60,7 +62,7 @@ A check-in is created `pending` and resolves exactly once at its deadline:
 
 | Terminal state | Condition | Money |
 | --- | --- | --- |
-| `verified` | Qualifying evidence received before the deadline (v1: the user marked it done) | None |
+| `verified` | Qualifying, non-withdrawn evidence received before the deadline (v1: the user marked it done and didn't undo it) | None |
 | `excused` | No evidence, free pass available | None |
 | `missed` | No evidence, no pass left | Charged |
 
@@ -92,7 +94,7 @@ Three screens, each preventing a specific support ticket.
 | Screen | Covers | Prevents |
 | --- | --- | --- |
 | You set the stakes | Task, days, amount, $1–$20 range, 11:59 pm deadline | "Why was I charged?" |
-| You mark it done | Tap "Mark done" before the deadline, it has to reach the server in time, 6 pm and 10 pm reminders | "I did it and it still charged me" |
+| You mark it done | Hold "Mark done" before the deadline, it has to reach the server in time, undo until 11:59 pm, 6 pm and 10 pm reminders | "I did it and it still charged me" |
 | There are limits | Free pass, $20 cap, pause any time | "I want a refund, I was sick" |
 
 Skippable on screens 1 and 2, not on 3.
@@ -103,8 +105,8 @@ The screen people open at 6 am and 10 pm. Answers one question: is anything due,
 
 Six states, sharing a fixed layout so the card never reflows when a day verifies mid-afternoon:
 
-- `pending` — stake in violet, time remaining, Mark done button (with a confirm, so a stray tap doesn't count)
-- `verified` — stake in green, labelled "Kept", with the time it was marked done
+- `pending` — stake in violet, time remaining, hold-to-confirm Mark done button
+- `verified` — stake in green, labelled "Kept", with the time it was marked done and an Undo button until the deadline
 - `missed` — stake in red, "Charged", with the time and card
 - `excused` — stake in violet-tint, "Free pass", with passes remaining
 - rest day — nothing due, next due date, deliberately not celebratory
@@ -152,11 +154,13 @@ No card form. Stripe's PaymentSheet collects card details inside Stripe's own UI
 
 ## Verification (v1: honor system)
 
-Version 1 has exactly one proof type: the user taps **Mark done**, confirms, and the app posts a self-report to the server. If it arrives before the deadline, the day is `verified`. Nothing else is checked.
+Version 1 has exactly one proof type: the user presses and holds **Mark done**, and the app posts a self-report to the server. If it arrives before the deadline and hasn't been undone, the day is `verified`. Nothing else is checked.
 
 This is a deliberate scoping decision, not a placeholder. It lets the whole money loop — scheduling, reminders, deadlines, charges, disputes — ship and be proven with real users before any verification work starts. Every task type works on day one, from "go to the gym" to "email Sam back", and the app needs no location, camera, or Health permissions.
 
-The confirm step matters more than it looks. "Mark done" is the one action that decides whether someone pays, so a stray tap in a pocket shouldn't count. The dialog is plain — "Mark today's _Go to the gym_ as done?" — not a guilt prompt.
+**Hold to confirm.** "Mark done" is the one action that decides whether someone pays, so a stray tap in a pocket shouldn't count — but a dialog on every gym day would get old by week two. Instead the button is pressed and held for under a second: a fill sweeps across it with light haptic ticks, and letting go early cancels. Screen-reader users get the same action through the standard activate gesture, since they can't hold.
+
+**Undo until the deadline.** A day marked done can be undone any time before 11:59 pm — for the honest user who tapped early and then didn't go. Undo withdraws the self-report (`withdrawn_at` is set, the row is kept) and the day returns to `pending`. After the deadline the day has resolved and there is no undo, consistent with terminal states never changing.
 
 The stronger proof types — location, photo, multiple proofs per commitment, and an AI agent that chooses between them — are specified in [Final phase — verification](#final-phase--verification) and built last.
 
@@ -171,7 +175,8 @@ What it does defend against rigorously is the accidental and the ambiguous:
 - **Clock manipulation** — the server computes deadlines from the commitment's stored timezone. Device time is never consulted.
 - **Backdating** — enforcement uses `server_received_at`, never a timestamp the device supplies.
 - **App deletion** — all state and all decisions live server-side. Uninstalling changes nothing.
-- **Double-counting** — one self-report per check-in; repeated taps are idempotent.
+- **Double-counting** — at most one live (non-withdrawn) self-report per check-in; repeated marks are idempotent.
+- **Late undo** — the server rejects an undo received after the deadline, whatever the device shows.
 - **Race conditions** — resolution runs inside a transaction with `SELECT … FOR UPDATE SKIP LOCKED`, so two workers can't resolve the same check-in.
 
 ---
@@ -210,7 +215,7 @@ Charging people for failing is the most disputable transaction type that exists.
 | Notification log | `notifications_log` | They were warned at 6 pm and 10 pm |
 | Free passes | `free_pass_usage` | Genuine emergencies were absorbed, not charged |
 | In-app history | `charges` | They could see every charge and its cause |
-| Clear descriptor | GYMSTAKES on statement | Not an unrecognised line item |
+| Clear descriptor | LAZYSTAKES on statement | Not an unrecognised line item |
 
 The payment screen asks people to contact support before disputing. A refund costs you $5; a chargeback costs you $5 plus a $15 fee plus a mark against your dispute rate. Refund generously and early.
 
@@ -232,7 +237,7 @@ Postgres 15+ on Supabase. Nine tables in v1; the final phase adds `places` and `
 | `payment_methods` | Stripe payment method references and display metadata | One default per user |
 | `commitments` | Title, weekdays, stake, timezone, deadline time, passes | Stake $1–$20 (honor system) |
 | `check_ins` | One row per commitment per due date | Unique on (commitment, date) |
-| `evidence` | Proof a check-in was done. `kind` is an enum; v1 uses only `self_report` | One `self_report` per check-in |
+| `evidence` | Proof a check-in was done. `kind` is an enum; v1 uses only `self_report` | One live (non-withdrawn) `self_report` per check-in; `withdrawn_at` for undo |
 | `charges` | One Stripe charge per missed check-in | Unique on check-in |
 | `free_pass_usage` | Passes consumed per commitment per month | Unique on check-in |
 | `consent_records` | Exact agreed language with timestamp and IP | — |
@@ -286,9 +291,9 @@ The app is almost a thin client. It renders state and forwards evidence; every d
 
 1. **2 am UTC** — the scheduler materialises check-ins two days ahead for every active commitment, skipping any whose deadline has already passed
 2. **Morning** — the user opens the app; it reads today's pending check-in from the API
-3. **Evening** — they go to the gym, then tap Mark done and confirm; the app POSTs a self-report and the service writes an `evidence` row stamped with `server_received_at`
+3. **Evening** — they go to the gym, then hold Mark done; the app POSTs a self-report and the service writes an `evidence` row stamped with `server_received_at`
 4. **6 pm and 10 pm** — reminder and final warning push, but only if the day is still unverified; every send is logged
-5. **11:59 pm local** — `resolveDeadlines()` finds the check-in, sees evidence received before the deadline, marks it `verified`
+5. **11:59 pm local** — `resolveDeadlines()` finds the check-in, sees non-withdrawn evidence received before the deadline, marks it `verified`
 6. **Had there been none** — it marks `missed` and inserts a charge row in the same transaction; `processCharges()` picks it up within fifteen minutes
 
 ### The three jobs
@@ -365,7 +370,7 @@ These matter more than the colours and should survive any visual redesign.
 
 ```mermaid
 flowchart LR
-    P1["<b>1 · Layout and polish</b><br/>Honor-system copy pass<br/>Layout rework, haptics<br/><i>Exit: UI feature-complete</i>"]
+    P1["<b>1 · Layout and polish</b><br/>Honor-system pass ✓, polish ✓<br/>Layout rework<br/><i>Exit: UI feature-complete</i>"]
     P2["<b>2 · Backend</b><br/>Schema live on Supabase<br/>Scheduler on Railway<br/><i>Exit: test card charged</i>"]
     P3["<b>3 · Auth</b><br/>Sign in with Apple<br/>RLS on every table<br/><i>Exit: real accounts work</i>"]
     P4["<b>4 · Payments</b><br/>Stripe PaymentSheet<br/>First EAS dev build<br/><i>Exit: a real card charged</i>"]
@@ -381,9 +386,15 @@ Verification is deliberately last. The honor system is a complete product on its
 
 ### Phase 1 — Layout and polish
 
-First, bring the existing screens in line with the honor-system v1: "Log workout" becomes "Mark done" with a confirm; HealthKit, QR, Apple Watch, and venue copy comes out of Today, create, confirm, onboarding, settings, and detail; the stake stepper clamps at $20; mock evidence becomes `self_report`. Then the layout rework, which is still being designed.
+**Done:**
 
-Then polish: transitions, haptics on stake changes and on marking a day done, loading skeletons, error states, and an empty state for every list. Finish the dark mode audit across all screens.
+- Honor-system pass: hold-to-confirm Mark done, undo until the deadline, HealthKit/QR/venue copy removed, stakes clamped $1–$20 with $5/$10/$20 presets, LazyStakes naming in the consent text and LAZYSTAKES descriptor.
+- Haptics, all through `src/lib/haptics.ts`: ticks while holding Mark done and a success pulse on completion; a light tap on undo; a tick per stake step with a firmer bump at the $1 floor and $20 cap; ticks on day chips, the consent checkbox, settings switches, segmented controls, and the theme toggle; a warning buzz when the delete dialog opens.
+- Stake block fades between states instead of snapping.
+- Loading skeletons, error states, and empty states for Today, the commitments list, commitment detail, and payment. Screens load through `useMockQuery`, which Phase 3 swaps for real API calls without changing the screens.
+- Dev tools (Today state pills, simulated loading/error, preview screens) gated on `EXPO_PUBLIC_SHOW_DEV_TOOLS`, defaulting to on in development and off in production.
+
+**Remaining:** the layout rework, which is still being designed, and a visual dark-mode audit on a device. Every colour now comes from `tokens.ts`, so the audit is about contrast and feel, not missed hard-coded values.
 
 Worth doing before the backend because it's the last time the UI can change cheaply. Once screens are wired to real data, every layout change touches two codebases.
 
@@ -427,7 +438,7 @@ Everything in this section is built last, after launch. None of it changes the c
 
 | Kind | How it works | Good for | Permission |
 | --- | --- | --- | --- |
-| `self_report` | Tap Mark done and confirm (the v1 method) | Emails, calls, anything unprovable | None |
+| `self_report` | Hold Mark done (the v1 method) | Emails, calls, anything unprovable | None |
 | `location` | Tap Complete; one foreground location reading; server checks it's inside a saved place | Pick up a prescription, show up to class | Location, while in use |
 | `location_dwell` | As above, plus a second reading 15 minutes later that must also be inside the place | Gym, study session, office hours | Location, while in use |
 | `photo` | Photo taken with the in-app camera, checked by the AI agent | Groceries, meal prep, a clean room | Camera |

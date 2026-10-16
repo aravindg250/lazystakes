@@ -1,13 +1,12 @@
 /**
  * Mock data for building the UI with no backend.
  *
- * The history is deliberately messy — a charged miss, a used free pass, a
- * QR check-in alongside Health-verified days, and a stake that was lower
- * two months ago. Those are the cases that break layouts and expose bad
+ * The history is deliberately messy — charged misses, a used free pass,
+ * days marked done at odd hours, and a stake that was lower two months ago. Those are the cases that break layouts and expose bad
  * assumptions, and finding them now is far cheaper than finding them later.
  */
 
-import type { Commitment, CheckIn, Venue, Weekday, CheckInStatus } from "../types";
+import type { Commitment, CheckIn, Weekday, CheckInStatus } from "../types";
 
 const iso = (daysFromNow: number, hour = 23, minute = 59) => {
   const d = new Date();
@@ -22,18 +21,12 @@ const dateStr = (daysFromNow: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-export const mockVenues: Venue[] = [
-  { id: "v1", name: "Planet Fitness — Old Bridge", latitude: 40.4, longitude: -74.3, radiusM: 120 },
-  { id: "v2", name: "Home garage", latitude: 40.41, longitude: -74.31, radiusM: 60 },
-];
-
 export const mockCommitments: Commitment[] = [
   {
     id: "c1",
     title: "Go to the gym",
     scheduleDays: [1, 3, 5] as Weekday[],
     stakeCents: 500,
-    venue: mockVenues[0],
     deadlineLocalTime: "23:59",
     freePassesPerMonth: 1,
     status: "active",
@@ -41,10 +34,9 @@ export const mockCommitments: Commitment[] = [
   },
   {
     id: "c2",
-    title: "Run 3 miles",
+    title: "Grocery run",
     scheduleDays: [2, 6] as Weekday[],
     stakeCents: 1000,
-    venue: null,
     deadlineLocalTime: "23:59",
     freePassesPerMonth: 1,
     status: "active",
@@ -55,7 +47,6 @@ export const mockCommitments: Commitment[] = [
     title: "Stretch before bed",
     scheduleDays: [1, 2, 3, 4, 5] as Weekday[],
     stakeCents: 200,
-    venue: null,
     deadlineLocalTime: "23:59",
     freePassesPerMonth: 2,
     status: "paused",
@@ -66,8 +57,10 @@ export const mockCommitments: Commitment[] = [
 // ---------------------------------------------------------------
 // Generated history
 // ---------------------------------------------------------------
-// Roughly nine weeks of gym days with a believable failure rate, plus a
-// couple of hand-placed edge cases near the top so they're easy to inspect.
+// Roughly nine weeks of gym days with a believable failure rate. Days are
+// marked done at varied times, including a couple close to the deadline.
+
+const MARKED_AT: [number, number][] = [[7, 12], [18, 42], [19, 5], [23, 48], [12, 30], [21, 15]];
 
 function buildGymHistory(): CheckIn[] {
   const out: CheckIn[] = [];
@@ -91,14 +84,7 @@ function buildGymHistory(): CheckIn[] {
       stakeCents: older ? 300 : 500,
       evidence:
         status === "verified"
-          ? i % 5 === 0
-            ? { kind: "qr_scan", receivedAt: iso(offset, 7, 12) }
-            : {
-                kind: "healthkit_workout",
-                receivedAt: iso(offset, 18, 30),
-                durationSec: 2400 + (i % 4) * 600,
-                activityType: i % 3 === 0 ? "Functional strength training" : "Traditional strength training",
-              }
+          ? { kind: "self_report", receivedAt: iso(offset, MARKED_AT[i % MARKED_AT.length][0], MARKED_AT[i % MARKED_AT.length][1]) }
           : null,
     });
   });

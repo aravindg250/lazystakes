@@ -16,6 +16,9 @@ import { Screen, Caption, Button, Gap } from "../src/components/primitives";
 import { ScreenHeader, BackButton } from "../src/components/chrome";
 import { CommitmentSummaryCard } from "../src/components/commitment";
 import { EmptyState } from "../src/components/CommitmentRow";
+import { SummaryCardsSkeleton, ErrorState } from "../src/components/states";
+import { DevFooter } from "../src/dev/DevPanel";
+import { useMockQuery } from "../src/dev/DevTools";
 import { useTheme, space } from "../src/theme";
 import { mockCommitments, statsFor } from "../src/mock/data";
 
@@ -23,7 +26,9 @@ export default function CommitmentsScreen() {
   const { c } = useTheme();
   const router = useRouter();
 
-  const sorted = [...mockCommitments].sort((a, b) => {
+  const query = useMockQuery(() => mockCommitments);
+
+  const sorted = [...(query.data ?? [])].sort((a, b) => {
     if (a.status === b.status) return 0;
     return a.status === "active" ? -1 : 1;
   });
@@ -40,7 +45,11 @@ export default function CommitmentsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: space.xxxl }}
         >
-          {sorted.length === 0 ? (
+          {query.status === "loading" ? (
+            <SummaryCardsSkeleton />
+          ) : query.status === "error" ? (
+            <ErrorState onRetry={query.retry} />
+          ) : sorted.length === 0 ? (
             <EmptyState onCreate={() => router.push("/commitment/new")} />
           ) : (
             <>
@@ -81,6 +90,8 @@ export default function CommitmentsScreen() {
             variant="primary"
             onPress={() => router.push("/commitment/new")}
           />
+
+          <DevFooter />
         </ScrollView>
       </Screen>
     </SafeAreaView>

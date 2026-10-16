@@ -13,7 +13,7 @@ import {
 } from "./primitives";
 import { useTheme, space, radius, type, hairline } from "../theme";
 import {
-  formatMoney, formatSchedule, WEEKDAY_INITIALS,
+  formatClockTime, formatMoney, formatSchedule, WEEKDAY_INITIALS,
   type Commitment, type CheckIn, type Weekday,
 } from "../types";
 import type { CommitmentStats } from "../mock/data";
@@ -185,13 +185,10 @@ export function HistoryRow({
     if (checkIn.status === "excused") return "Free pass";
     if (checkIn.status === "pending") return "Due today";
     const e = checkIn.evidence;
-    if (!e) return "Kept";
-    if (e.kind === "qr_scan") return "QR check-in";
-    const mins = e.durationSec ? `${Math.round(e.durationSec / 60)} min` : "";
-    return mins ? `Health · ${mins}` : "Health";
+    return e ? `Marked done ${formatClockTime(e.receivedAt)}` : "Kept";
   })();
 
-  const moneyTone =
+  const moneyTone: "charged" | "muted" | "secondary" =
     checkIn.status === "missed" ? "charged"
     : checkIn.status === "verified" ? "muted"
     : "secondary";
@@ -210,7 +207,7 @@ export function HistoryRow({
         <Body numberOfLines={1}>{date}</Body>
         <Caption>{detail}</Caption>
       </View>
-      <MoneySm tone={moneyTone as any}>
+      <MoneySm tone={moneyTone}>
         {checkIn.status === "missed" ? `−${formatMoney(checkIn.stakeCents, false)}` : formatMoney(checkIn.stakeCents, false)}
       </MoneySm>
     </View>

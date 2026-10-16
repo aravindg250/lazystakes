@@ -12,6 +12,7 @@ import Feather from "@expo/vector-icons/Feather";
 
 import { Card, Body, Caption, Gap } from "./primitives";
 import { useTheme, space, hairline } from "../theme";
+import { haptics } from "../lib/haptics";
 
 export function Section({
   label, footnote, children,
@@ -103,9 +104,9 @@ export function ToggleRow({
         </View>
         <Switch
           value={value}
-          onValueChange={onChange}
+          onValueChange={(v) => { haptics.tick(); onChange(v); }}
           trackColor={{ false: c.hairlineStrong, true: c.accent }}
-          thumbColor="#FFFFFF"
+          thumbColor={c.switchThumb}
           ios_backgroundColor={c.hairlineStrong}
         />
       </View>
