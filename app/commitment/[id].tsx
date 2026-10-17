@@ -76,7 +76,7 @@ export default function CommitmentDetailScreen() {
     haptics.warning();
     Alert.alert(
       "Delete commitment?",
-      "Your history stays, but nothing new will be scheduled and you won't be charged again.",
+      "Your history stays and nothing new will be scheduled. If today is due, it still counts.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: () => router.back() },

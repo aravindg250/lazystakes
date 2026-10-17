@@ -31,8 +31,9 @@ Phase 1 is complete apart from the layout rework, which is still being designed.
 | Polish (haptics, state transitions, loading, errors, empty states) | Done |
 | Layout rework | Being designed |
 | Dark mode visual audit | Not done — needs a device pass |
-| Postgres schema | Not in repo — to be written |
-| Scheduler and Stripe service | Not in repo — to be written |
+| Postgres schema | Written (`server/db/schema.sql`), tested in-process, not deployed |
+| Scheduler, API, and Stripe service | Written (`server/`), tested in-process, not deployed |
+| Phase 2 exit test against real Supabase + Stripe | Passed (2026-10-17) |
 | Auth | Not started |
 | Verification beyond honor system | Final phase — not started |
 
@@ -197,13 +198,16 @@ This is the single most important architectural decision in the product, and it'
 2. Check-in marked `missed` and a `charges` row inserted — same transaction, so a crash can never produce a miss with no charge or a charge with no miss
 3. A separate worker picks up pending charges and calls Stripe
 4. PaymentIntent created with `off_session: true` and `confirm: true` against the saved payment method
-5. Result written back; failures retry up to three attempts
+5. Result written back; failures retry up to three attempts (1 hour, then 6 hours apart)
+6. After the third failure the charge is `failed` and the user is **blocked from creating or resuming commitments** until it's paid. Existing commitments keep running. When the card is fixed (Stripe webhook, Phase 4), failed charges are requeued for another three attempts; the block lifts when they succeed. The block is derived from the `charges` table, never stored as a flag, so it can't drift.
 
 ### Idempotency
 
 Every charge carries an idempotency key derived from its check-in id: `checkin_<uuid>`.
 
 If the server times out mid-call and retries, Stripe returns the original PaymentIntent rather than creating a second one. Double-charging someone for one missed gym day would be fatal to trust in a product whose entire premise is that the charging is fair. This one line is the insurance.
+
+Retries after a decline don't create a new PaymentIntent at all: they re-confirm the original one (reading it first, in case an earlier attempt actually succeeded). A PaymentIntent can succeed at most once, so no sequence of retries, crashes, or duplicate workers can charge a missed day twice. Retry confirmations use their own keys (`checkin_<id>_attempt_<n>`); the attempt counter only ever increases, so a key is never reused.
 
 ### Chargeback defence
 
@@ -277,7 +281,7 @@ flowchart LR
     SVC["Railway service<br/><i>REST API and cron</i><br/><i>Owns the deadline clock</i>"]
     PG[("Supabase Postgres<br/><i>9 tables, RLS enabled</i>")]
     STRIPE["Stripe<br/><i>PaymentSheet and charges</i>"]
-    APNS["APNs<br/><i>6 pm and 10 pm warnings</i>"]
+    APNS["Expo push → APNs<br/><i>6 pm and 10 pm warnings</i>"]
 
     APP -->|"Mark done (self-report)"| SVC
     SVC -->|charges| STRIPE
@@ -400,9 +404,17 @@ Worth doing before the backend because it's the last time the UI can change chea
 
 ### Phase 2 — Backend and scheduler
 
-Supabase project, write and run `schema.sql` (it isn't in the repo yet), insert a user and commitment by hand, then confirm `materializeCheckIns()` creates the right rows for the right days. Timezone bugs surface here, which is exactly where you want them.
+**Built** (in `server/`, setup steps in `server/README.md`):
 
-Then the Railway service with `node-cron`: materialise at 2 am UTC, resolve and charge every fifteen minutes. Test the whole loop in Stripe test mode with a deadline five minutes out.
+- `db/schema.sql` — nine tables with the money rules as database constraints: integer cents, $1–$20 stakes, one check-in per commitment per day, one charge per missed check-in with a derived idempotency key, a trigger that refuses to change a resolved day, withdrawn (not deleted) evidence for undo, financial rows that never cascade.
+- Four idempotent jobs on `node-cron`: materialise at 2 am UTC (and immediately when a commitment is created or resumed); resolve, charge, and notify every fifteen minutes. Notifications go through Expo's push service and stay off (`NOTIFICATIONS_ENABLED=false`) until the app registers push tokens.
+- The REST API the app will call in Phase 3, returning the app's existing types. Closed (401) until Sign in with Apple; a `DEV_AUTH` header mode exists for local testing only.
+- A test suite that runs the real schema in in-process Postgres with a fake clock and fake Stripe: timezone and DST maths, mark/undo windows, free passes, misses, charge retries, the billing block, crash recovery, pausing, and notifications.
+- `npm run exit-test`: the exit test below, automated against real Supabase and Stripe test mode.
+
+**Done:** Supabase project with the schema, Stripe test mode, and the exit test passing (2026-10-17).
+
+**Remaining:** deploy to Railway.
 
 **Do not move on until you've watched a test card get charged for a missed check-in and confirmed that rerunning the job doesn't charge it twice.** That's the single most important verification in the build.
 
@@ -559,11 +571,11 @@ Social stakes are the most-requested feature in this category and the one that w
 - [x] A commitment can accept more than one proof type; any one verifies the day
 - [x] Time-based tasks use a second location reading 15 minutes after the first
 - [x] Photos are deleted after 30 days
+- [x] A failed charge retries three times, then blocks new and resumed commitments until it's paid
 
 ### Open decisions
 
 - [ ] Exact honor-system cap — $20 is a proposal that matches the existing top preset
-- [ ] Does a failed charge (expired card, insufficient funds) retry, pause the commitment, or lock the app until resolved?
 - [ ] Is the 15-minute stay fixed, or proposed per task by the agent (e.g. 45 minutes for a workout)?
 - [ ] Can a user override the agent's proof proposal down to honor system for a task the agent thinks is provable?
 - [ ] What happens when someone travels across timezones mid-commitment — current design freezes the original timezone, which is defensible but will generate confused support messages
