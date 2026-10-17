@@ -31,8 +31,8 @@ Phase 1 is complete apart from the layout rework, which is still being designed.
 | Polish (haptics, state transitions, loading, errors, empty states) | Done |
 | Layout rework | Being designed |
 | Dark mode visual audit | Not done — needs a device pass |
-| Postgres schema | Written (`server/db/schema.sql`), tested in-process, not deployed |
-| Scheduler, API, and Stripe service | Written (`server/`), tested in-process, not deployed |
+| Postgres schema | Live on Supabase (`server/db/schema.sql`) |
+| Scheduler, API, and Stripe service | Live on Railway (`server/`), Stripe in test mode; /v1 closed until Phase 3 |
 | Phase 2 exit test against real Supabase + Stripe | Passed (2026-10-17) |
 | Auth | Not started |
 | Verification beyond honor system | Final phase — not started |
@@ -414,7 +414,7 @@ Worth doing before the backend because it's the last time the UI can change chea
 
 **Done:** Supabase project with the schema, Stripe test mode, and the exit test passing (2026-10-17).
 
-**Remaining:** deploy to Railway.
+**Done (2026-10-17):** deployed to Railway; `/health` responds and every `/v1` endpoint returns 401 until sign-in exists. Phase 2 is complete.
 
 **Do not move on until you've watched a test card get charged for a missed check-in and confirmed that rerunning the job doesn't charge it twice.** That's the single most important verification in the build.
 
