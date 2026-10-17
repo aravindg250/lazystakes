@@ -5,6 +5,7 @@
  */
 
 import type { Db } from "./db";
+import type { AuthVerifier } from "./gateways/auth";
 import type { ChargeGateway } from "./gateways/stripe";
 import type { PushGateway } from "./gateways/push";
 
@@ -15,5 +16,7 @@ export type Deps = {
   charges: ChargeGateway;
   push: PushGateway;
   notificationsEnabled: boolean;
+  /** Checks session tokens. Null when SUPABASE_URL isn't set: API closed. */
+  auth: AuthVerifier | null;
   devAuth: boolean;
 };

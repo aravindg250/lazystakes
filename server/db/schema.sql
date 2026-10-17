@@ -11,9 +11,8 @@
 --     commitment's IANA timezone, never a bare local timestamp.
 --   * Financial rows never cascade away. Deleting a commitment archives it.
 --
--- Not in this file yet (Phase 3): the foreign key from users.id to
--- Supabase's auth.users, and row-level security policies. RLS must be on
--- before any real user data exists — see docs/specsheet.md.
+-- After this file, run every file in db/migrations/ in order. 001 ties
+-- users to Supabase sign-ins and turns on row-level security.
 -- =====================================================================
 
 create type commitment_status as enum ('active', 'paused', 'archived');
@@ -26,8 +25,8 @@ create type notification_status as enum ('sending', 'sent', 'failed');
 -- ---------------------------------------------------------------------
 -- users
 -- ---------------------------------------------------------------------
--- Phase 3 makes `id` reference auth.users(id). Until then rows are
--- inserted by hand or by scripts/seed.ts.
+-- `id` is the Supabase Auth user id (migration 001 adds the foreign key).
+-- The API creates the row on a user's first signed-in request.
 
 create table users (
   id                  uuid primary key default gen_random_uuid(),

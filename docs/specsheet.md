@@ -34,7 +34,7 @@ Phase 1 is complete apart from the layout rework, which is still being designed.
 | Postgres schema | Live on Supabase (`server/db/schema.sql`) |
 | Scheduler, API, and Stripe service | Live on Railway (`server/`), Stripe in test mode; /v1 closed until Phase 3 |
 | Phase 2 exit test against real Supabase + Stripe | Passed (2026-10-17) |
-| Auth | Not started |
+| Auth | Server side done: token checks, accounts, RLS live on Supabase. Sign in with Apple in the app not started |
 | Verification beyond honor system | Final phase — not started |
 
 ### Stack
@@ -269,7 +269,9 @@ The stake check constraint should be written so it can be relaxed per proof type
 
 Supabase's anon key ships inside the app bundle and is extractable by anyone. That's fine and by design, _but only if RLS is enabled on every table_. With RLS off, the anon key is full read access to your database.
 
-RLS must be on before any real user data exists. Every table gets a policy scoped to `auth.uid()`; `charges`, `consent_records`, and `notifications_log` are read-only to the client and written only by the service role.
+RLS must be on before any real user data exists. It is (migration `001_auth_and_rls.sql`), and it's stricter than "scoped to `auth.uid()`": the app never touches tables directly, so the anon key has no grants at all, signed-in sessions can only `select` their own rows, and nothing is writable from the client. Every write goes through the Railway API, because a direct write would skip its rules (deadlines, stake limits, consent, the billing block). The API connects as `postgres`, which bypasses RLS.
+
+The app sends the Supabase session's access token to the API as a bearer token. The API verifies it against the project's published public key (ES256), so no JWT secret is stored anywhere, and refuses expired, forged, wrong-project, and anonymous-user tokens.
 
 ---
 
@@ -421,6 +423,14 @@ Worth doing before the backend because it's the last time the UI can change chea
 ### Phase 3 — Auth and real data
 
 Sign in with Apple, RLS policies on every table, and swap the mock imports for real API calls. The screens shouldn't need restructuring — they already take typed props that match the schema.
+
+**Built (server side):**
+
+- Migration `001_auth_and_rls.sql`, applied to Supabase with `npm run migrate`: `users.id` references `auth.users` (restrict, so an account with charge history can't be deleted by accident), RLS on all nine tables, no anon access, own-rows read-only for signed-in sessions.
+- Bearer-token auth on every `/v1` route; the first signed-in request creates the account with the device's timezone (`x-timezone`, falling back to UTC).
+- Tests with real signed tokens and the real policies: expired, forged, wrong-issuer, wrong-audience, anon-role, and anonymous-user tokens are refused; one user can't see or change another's commitments; the public key reads nothing; signed-in sessions write nothing.
+
+**Remaining:** Apple Developer and Supabase Apple-provider setup, the sign-in screen, sending the token and timezone from the app, swapping `useMockQuery` for real calls, and push-token registration.
 
 ### Phase 4 — Real payments
 

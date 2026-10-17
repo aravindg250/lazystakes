@@ -28,6 +28,7 @@ import { DateTime } from "luxon";
 import { createRuntime } from "../src/runtime";
 import { runJob } from "../src/scheduler";
 import { deadlineUtc, localDate } from "../src/time";
+import { createTestUser } from "./test-user";
 
 const TZ = "America/New_York";
 const STAKE = 500;
@@ -46,15 +47,13 @@ try {
   step(1, "Creating test user with Stripe test card");
   const customer = await stripe.customers.create({ description: "LazyStakes exit test" });
   const pm = await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id });
-  const { rows: [user] } = await deps.db.query<{ id: string }>(
-    `insert into users (timezone, stripe_customer_id) values ($1, $2) returning id`, [TZ, customer.id],
-  );
+  const user = await createTestUser(deps.db, "exit-test", TZ, customer.id);
   await deps.db.query(
     `insert into payment_methods (user_id, stripe_payment_method_id, brand, last4, exp_month, exp_year, is_default)
      values ($1, $2, $3, $4, $5, $6, true)`,
-    [user!.id, pm.id, pm.card!.brand, pm.card!.last4, pm.card!.exp_month, pm.card!.exp_year],
+    [user.id, pm.id, pm.card!.brand, pm.card!.last4, pm.card!.exp_month, pm.card!.exp_year],
   );
-  console.log(`    user ${user!.id}, customer ${customer.id}`);
+  console.log(`    user ${user.id}, customer ${customer.id}`);
 
   step(2, "Creating a commitment due today, deadline ~2 minutes out");
   const now = new Date();
@@ -68,7 +67,7 @@ try {
     // No free passes, or the miss would correctly be excused instead of charged.
     `insert into commitments (user_id, title, schedule_days, stake_cents, timezone, deadline_local_time, starts_on, free_passes_per_month)
      values ($1, 'Exit test', $2, $3, $4, $5, $6, 0) returning id`,
-    [user!.id, [weekday], STAKE, TZ, deadlineLocal, today],
+    [user.id, [weekday], STAKE, TZ, deadlineLocal, today],
   );
   await runJob("materialize", deps);
   const { rows: [ci] } = await deps.db.query<{ id: string; deadline_utc: Date }>(

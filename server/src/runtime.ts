@@ -10,6 +10,7 @@ import { createPgDb } from "./db";
 import type { Deps } from "./deps";
 import { createStripeGateway, type ChargeGateway } from "./gateways/stripe";
 import { createExpoPushGateway } from "./gateways/push";
+import { createSupabaseVerifier } from "./gateways/auth";
 
 export function createRuntime(): { config: Config; deps: Deps; stripe: Stripe | null } {
   const config = loadConfig();
@@ -29,6 +30,7 @@ export function createRuntime(): { config: Config; deps: Deps; stripe: Stripe | 
     charges: stripe ? createStripeGateway(stripe) : noStripe,
     push: createExpoPushGateway(),
     notificationsEnabled: config.notificationsEnabled,
+    auth: config.supabaseUrl ? createSupabaseVerifier(config.supabaseUrl) : null,
     devAuth: config.devAuth,
   };
 

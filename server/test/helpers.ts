@@ -1,24 +1,48 @@
 /**
- * Test harness: real Postgres (PGlite, in-process) running db/schema.sql,
- * a controllable clock, and fake Stripe and push gateways that record calls.
+ * Test harness: real Postgres (PGlite, in-process) running db/schema.sql and
+ * every migration on top of a small stand-in for Supabase's auth schema, a
+ * controllable clock, real signed session tokens, and fake Stripe and push
+ * gateways that record calls.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey } from "jose";
 
 import type { Db, Queryable, Row } from "../src/db";
 import type { Deps } from "../src/deps";
 import type { ChargeRequest, ChargeResult } from "../src/gateways/stripe";
 import type { PushMessage } from "../src/gateways/push";
 import { createApp } from "../src/api/app";
+import { createJwtVerifier } from "../src/gateways/auth";
 
-const schema = readFileSync(fileURLToPath(new URL("../db/schema.sql", import.meta.url)), "utf8");
+const dbDir = new URL("../db/", import.meta.url);
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, dbDir)), "utf8");
+const migrations = readdirSync(fileURLToPath(new URL("migrations/", dbDir)))
+  .filter((f) => f.endsWith(".sql")).sort()
+  .map((f) => read(`migrations/${f}`));
 
-export async function createTestDb(): Promise<Db> {
+// The parts of a Supabase project the migrations depend on.
+const supabaseStub = `
+  create role anon nologin;
+  create role authenticated nologin;
+  create schema auth;
+  grant usage on schema auth to anon, authenticated;
+  create table auth.users (id uuid primary key);
+  create function auth.uid() returns uuid language sql stable as $$
+    select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+  $$;
+  -- Supabase's default: everything granted to the client roles.
+  alter default privileges in schema public grant all on tables to anon, authenticated;
+`;
+
+export async function createTestDb(): Promise<Db & { pg: PGlite }> {
   // Keep `date` as "YYYY-MM-DD", matching the node-postgres setup.
   const pg = await PGlite.create({ parsers: { 1082: (v: string) => v } });
-  await pg.exec(schema);
+  await pg.exec(supabaseStub);
+  await pg.exec(read("schema.sql"));
+  for (const m of migrations) await pg.exec(m);
 
   const wrap = (q: { query: PGlite["query"] }): Queryable => ({
     query: async <T extends Row>(text: string, params?: unknown[]) => {
@@ -28,10 +52,30 @@ export async function createTestDb(): Promise<Db> {
   });
 
   return {
+    pg,
     ...wrap(pg),
     tx: (fn) => pg.transaction((tx) => fn(wrap(tx))),
     close: () => pg.close(),
   };
+}
+
+// One signing key for the whole run, standing in for the project's key.
+export const ISSUER = "https://test-project.supabase.co/auth/v1";
+const signingKey = await generateKeyPair("ES256");
+const publicJwk = { ...(await exportJWK(signingKey.publicKey)), kid: "test", alg: "ES256" };
+
+export async function signToken(
+  sub: string,
+  opts: { exp?: string | number; iss?: string; aud?: string; role?: string; anonymous?: boolean; key?: CryptoKey } = {},
+) {
+  return new SignJWT({ role: opts.role ?? "authenticated", is_anonymous: opts.anonymous ?? false })
+    .setProtectedHeader({ alg: "ES256", kid: "test" })
+    .setSubject(sub)
+    .setIssuer(opts.iss ?? ISSUER)
+    .setAudience(opts.aud ?? "authenticated")
+    .setIssuedAt()
+    .setExpirationTime(opts.exp ?? "1h")
+    .sign(opts.key ?? signingKey.privateKey);
 }
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
@@ -53,6 +97,7 @@ export async function createHarness() {
     charges: { charge: async (req) => { chargeCalls.push(req); return chargeResponder(req); } },
     push: { send: async (msg) => { pushes.push(msg); return { ok: true, ticketId: `t${pushes.length}` }; } },
     notificationsEnabled: true,
+    auth: createJwtVerifier(createLocalJWKSet({ keys: [publicJwk] }), ISSUER),
     devAuth: true,
   };
 
@@ -60,8 +105,9 @@ export async function createHarness() {
 
   async function createUser(timezone = "America/New_York", opts: { card?: boolean; token?: string } = {}) {
     const { rows: [u] } = await db.query<{ id: string }>(
-      `insert into users (timezone, stripe_customer_id, expo_push_token)
-       values ($1, $2, $3) returning id`,
+      `with a as (insert into auth.users (id) values (gen_random_uuid()) returning id)
+       insert into users (id, timezone, stripe_customer_id, expo_push_token)
+       select a.id, $1, $2, $3 from a returning id`,
       [timezone, opts.card === false ? null : `cus_${Math.random().toString(36).slice(2)}`, opts.token ?? null],
     );
     if (opts.card !== false) {
@@ -84,8 +130,15 @@ export async function createHarness() {
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T };
   }
 
+  /** A request with raw headers, for exercising auth itself. */
+  async function request<T = any>(path: string, headers: Record<string, string>, init: RequestInit = {}) {
+    const res = await app.request(path, { ...init, headers });
+    const text = await res.text();
+    return { status: res.status, body: (text ? JSON.parse(text) : null) as T };
+  }
+
   return {
-    db, deps, app, api, createUser, chargeCalls, pushes,
+    db, deps, app, api, request, createUser, chargeCalls, pushes,
     setNow: (iso: string) => { now = new Date(iso); },
     respondToCharges: (fn: (req: ChargeRequest) => ChargeResult) => { chargeResponder = fn; },
   };

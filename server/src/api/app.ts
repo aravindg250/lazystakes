@@ -6,9 +6,11 @@
  * commitment can be created — is enforced here against the server clock,
  * whatever the device shows.
  *
- * Auth: Phase 3 adds Sign in with Apple. Until then the API is closed
- * unless DEV_AUTH is on, which lets local requests choose a user with an
- * `x-dev-user-id` header. DEV_AUTH must never be on in production.
+ * Auth: every /v1 request carries the Supabase session token as
+ * `Authorization: Bearer <token>`. The users row is created on the first
+ * signed-in request, with the device's timezone from `x-timezone`.
+ * DEV_AUTH additionally lets local requests pick a user with an
+ * `x-dev-user-id` header; it must never be on in production.
  */
 
 import { isIP } from "node:net";
@@ -54,17 +56,49 @@ export function createApp(deps: Deps) {
   // ---------------------------------------------------------------
 
   app.use("/v1/*", async (c, next) => {
-    if (!deps.devAuth) {
-      throw new ApiError(401, "auth_not_configured", "Sign-in arrives in Phase 3");
+    const bearer = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+
+    if (bearer) {
+      if (!deps.auth) throw new ApiError(401, "auth_not_configured", "Sign-in isn't set up on the server");
+      const result = await deps.auth.verify(bearer);
+      if (!result.ok) {
+        throw result.reason === "anonymous"
+          ? new ApiError(401, "anonymous_not_allowed", "Sign in with an account to continue")
+          : new ApiError(401, "unauthenticated", "Your session has expired. Sign in again.");
+      }
+      // First request after sign-in creates the account. A missing or bad
+      // timezone falls back to UTC; the app corrects it with PATCH /v1/me.
+      const tz = c.req.header("x-timezone");
+      try {
+        await deps.db.query(
+          `insert into users (id, timezone) values ($1, $2) on conflict (id) do nothing`,
+          [result.userId, tz && isValidTimezone(tz) ? tz : "UTC"],
+        );
+      } catch (err) {
+        // A still-valid token for an auth user that has since been deleted.
+        if ((err as { code?: string }).code === "23503") {
+          throw new ApiError(401, "unauthenticated", "This account no longer exists");
+        }
+        throw err;
+      }
+      c.set("userId", result.userId);
+      return next();
     }
-    const id = c.req.header("x-dev-user-id");
-    if (!id || !uuid.safeParse(id).success) {
-      throw new ApiError(401, "unauthenticated", "Missing or invalid x-dev-user-id");
+
+    if (deps.devAuth) {
+      const id = c.req.header("x-dev-user-id");
+      if (!id || !uuid.safeParse(id).success) {
+        throw new ApiError(401, "unauthenticated", "Missing or invalid x-dev-user-id");
+      }
+      const { rows } = await deps.db.query(`select 1 from users where id = $1`, [id]);
+      if (rows.length === 0) throw new ApiError(401, "unauthenticated", "Unknown user");
+      c.set("userId", id);
+      return next();
     }
-    const { rows } = await deps.db.query(`select 1 from users where id = $1`, [id]);
-    if (rows.length === 0) throw new ApiError(401, "unauthenticated", "Unknown user");
-    c.set("userId", id);
-    await next();
+
+    throw deps.auth
+      ? new ApiError(401, "unauthenticated", "Sign in to continue")
+      : new ApiError(401, "auth_not_configured", "Sign-in isn't set up on the server");
   });
 
   // ---------------------------------------------------------------

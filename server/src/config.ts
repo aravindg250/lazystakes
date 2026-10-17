@@ -17,6 +17,9 @@ const bool = (fallback: boolean) =>
 const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   STRIPE_SECRET_KEY: z.string().optional(),
+  // https://<project-ref>.supabase.co — not a secret. Without it the API
+  // can't check sign-ins and stays closed.
+  SUPABASE_URL: z.url({ protocol: /^https$/ }).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   JOBS_ENABLED: bool(true),
   NOTIFICATIONS_ENABLED: bool(false),
@@ -26,6 +29,7 @@ const schema = z.object({
 export type Config = {
   databaseUrl: string;
   stripeSecretKey: string | undefined;
+  supabaseUrl: string | undefined;
   port: number;
   jobsEnabled: boolean;
   notificationsEnabled: boolean;
@@ -42,6 +46,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     databaseUrl: e.DATABASE_URL,
     stripeSecretKey: e.STRIPE_SECRET_KEY || undefined,
+    supabaseUrl: e.SUPABASE_URL || undefined,
     port: e.PORT,
     jobsEnabled: e.JOBS_ENABLED,
     notificationsEnabled: e.NOTIFICATIONS_ENABLED,
