@@ -14,7 +14,7 @@
  */
 
 import React, { useState } from "react";
-import { View, ScrollView, Pressable } from "react-native";
+import { View, ScrollView, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
@@ -25,7 +25,8 @@ import {
 import { ScreenHeader, BackButton } from "../../src/components/chrome";
 import { useTheme, space, radius } from "../../src/theme";
 import { haptics } from "../../src/lib/haptics";
-import { mockPaymentMethod } from "../../src/mock/data";
+import { useQuery } from "../../src/lib/query";
+import { api, cardLabel, ApiError } from "../../src/lib/api";
 import { formatMoney, formatSchedule, type Weekday } from "../../src/types";
 
 export default function ConfirmCommitmentScreen() {
@@ -36,11 +37,14 @@ export default function ConfirmCommitmentScreen() {
   }>();
 
   const [agreed, setAgreed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const me = useQuery(api.me);
 
   const title = params.title ?? "Go to the gym";
   const days = (params.days ?? "").split(",").filter(Boolean).map(Number) as Weekday[];
   const stakeCents = Number(params.stakeCents ?? 500);
-  const card = `${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`;
+  const card = me.status === "ready" ? cardLabel(me.data.paymentMethod, "card on file") : "card on file";
+  const noCard = me.status === "ready" && !me.data.paymentMethod;
 
   // Load-bearing wording: this exact string plus a timestamp is the consent
   // record sent to Stripe in a dispute. It names the amount, the trigger,
@@ -48,6 +52,26 @@ export default function ConfirmCommitmentScreen() {
   const consentText =
     `I authorise LazyStakes to charge ${formatMoney(stakeCents)} to my ${card} ` +
     `each ${formatSchedule(days).toLowerCase()} that I don't mark "${title}" done by 11:59 pm.`;
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      // The server stores this exact text as the consent record, and
+      // refuses it if it doesn't name this stake and this title.
+      await api.createCommitment({ title, scheduleDays: days, stakeCents, consentText });
+      haptics.success();
+      router.dismissTo("/");
+    } catch (e) {
+      haptics.warning();
+      const blocked = e instanceof ApiError && e.code === "billing_blocked";
+      Alert.alert(
+        blocked ? "A charge needs fixing first" : "Couldn't create it",
+        e instanceof ApiError ? e.message : "Something went wrong. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -77,7 +101,7 @@ export default function ConfirmCommitmentScreen() {
             <SummaryRow label="Deadline" value="11:59 pm" />
             <SummaryRow label="Free passes" value="1 per month" />
             <SummaryRow label="Proof" value="Honor system" />
-            <SummaryRow label="Card" value={card} />
+            <SummaryRow label="Card" value={noCard ? "Not added yet" : card} />
           </Card>
 
           <Gap size={space.xl} />
@@ -114,11 +138,19 @@ export default function ConfirmCommitmentScreen() {
 
           <Gap size={space.xl} />
 
+          {noCard && (
+            <>
+              <Caption style={{ textAlign: "center" }}>
+                {"You haven't added a card yet. Missed days can't be charged until you do."}
+              </Caption>
+              <Gap size={space.md} />
+            </>
+          )}
           <Button
-            label="Create commitment"
+            label={busy ? "Creating…" : "Create commitment"}
             variant="primary"
-            disabled={!agreed}
-            onPress={() => router.replace("/")}
+            disabled={!agreed || busy || me.status !== "ready"}
+            onPress={create}
           />
           <Gap size={space.sm} />
           <Caption style={{ textAlign: "center" }}>

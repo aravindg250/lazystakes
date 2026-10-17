@@ -24,16 +24,34 @@ import { ScreenHeader, BackButton } from "../src/components/chrome";
 import { Section, InfoRow } from "../src/components/settings";
 import { RowsSkeleton, ErrorState } from "../src/components/states";
 import { DevFooter } from "../src/dev/DevPanel";
-import { useMockQuery } from "../src/dev/DevTools";
+import { useQuery } from "../src/lib/query";
+import { api, cardBrand, type ChargeStatus } from "../src/lib/api";
 import { useTheme, space, hairline } from "../src/theme";
 import { formatMoney } from "../src/types";
-import { mockPaymentMethod, allCharges } from "../src/mock/data";
+
+const loadPayment = async () => {
+  const [me, charges] = await Promise.all([api.me(), api.charges()]);
+  return { me, charges };
+};
+
+/** Shown under a charge that hasn't simply gone through. */
+const STATUS_NOTE: Partial<Record<ChargeStatus, string>> = {
+  pending: "Processing",
+  processing: "Processing",
+  failed: "Couldn't be charged",
+  refunded: "Refunded",
+};
 
 export default function PaymentScreen() {
   const { c } = useTheme();
-  const query = useMockQuery(allCharges);
-  const charges = query.data ?? [];
-  const totalCents = charges.reduce((sum, x) => sum + x.checkIn.stakeCents, 0);
+  const query = useQuery(loadPayment);
+  const charges = query.data?.charges ?? [];
+  const pm = query.data?.me.paymentMethod ?? null;
+  const billing = query.data?.me.billing;
+  // Only money that actually moved counts toward the total.
+  const totalCents = charges
+    .filter((x) => x.status === "succeeded")
+    .reduce((sum, x) => sum + x.amountCents, 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -55,15 +73,36 @@ export default function PaymentScreen() {
                 <Feather name="credit-card" size={16} color={c.textSecondary} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Body>{mockPaymentMethod.brand} ending {mockPaymentMethod.last4}</Body>
-                <Caption>
-                  Expires {String(mockPaymentMethod.expMonth).padStart(2, "0")}/{mockPaymentMethod.expYear}
-                </Caption>
+                {pm ? (
+                  <>
+                    <Body>{cardBrand(pm)} ending {pm.last4}</Body>
+                    <Caption>
+                      Expires {String(pm.expMonth).padStart(2, "0")}/{pm.expYear}
+                    </Caption>
+                  </>
+                ) : (
+                  <>
+                    <Body>No card yet</Body>
+                    <Caption>{"Missed days can't be charged until you add one."}</Caption>
+                  </>
+                )}
               </View>
             </View>
 
+            {billing?.blocked && (
+              <>
+                <Gap size={space.md} />
+                <Body tone="charged">
+                  {`A ${formatMoney(billing.amountCents)} charge couldn't be completed. ` +
+                    "Until it's paid you can't start or resume commitments."}
+                </Body>
+              </>
+            )}
+
             <Gap size={space.lg} />
-            <Button label="Change card" onPress={() => {}} />
+            {/* Card entry is Stripe's PaymentSheet, which arrives with the
+                first development build. */}
+            <Button label={pm ? "Change card (coming soon)" : "Add card (coming soon)"} disabled onPress={() => {}} />
           </Card>
 
           <Gap size={space.md} />
@@ -105,12 +144,12 @@ export default function PaymentScreen() {
               <Card padding={0} style={{ paddingHorizontal: space.lg }}>
                 {charges.map((x, i) => (
                   <ChargeRow
-                    key={x.checkIn.id}
+                    key={x.id}
                     title={x.commitmentTitle}
                     dateLabel={new Date(x.checkIn.deadlineAt).toLocaleDateString(undefined, {
                       month: "short", day: "numeric", year: "numeric",
-                    })}
-                    amountCents={x.checkIn.stakeCents}
+                    }) + (STATUS_NOTE[x.status] ? ` · ${STATUS_NOTE[x.status]}` : "")}
+                    amountCents={x.amountCents}
                     showDivider={i < charges.length - 1}
                   />
                 ))}

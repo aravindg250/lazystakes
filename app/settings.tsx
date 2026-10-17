@@ -11,8 +11,8 @@
  * the consequence gets stated at the point of the decision.
  */
 
-import React, { useState } from "react";
-import { ScrollView } from "react-native";
+import React from "react";
+import { ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -22,15 +22,41 @@ import { Section, SettingsRow, ToggleRow, InfoRow, CustomRow } from "../src/comp
 import { DataStatePills } from "../src/dev/DevPanel";
 import { SHOW_DEV_TOOLS } from "../src/dev/DevTools";
 import { useTheme, space, type ThemeMode } from "../src/theme";
-import { mockPaymentMethod, mockAccount } from "../src/mock/data";
+import { useAuth } from "../src/lib/auth";
+import { useQuery } from "../src/lib/query";
+import { api, cardLabel, type Me } from "../src/lib/api";
+
+type ReminderKey = keyof Me["settings"];
 
 export default function SettingsScreen() {
   const { c, mode, setMode } = useTheme();
   const router = useRouter();
+  const { session, signOut } = useAuth();
+  const me = useQuery(api.me);
 
-  const [remind6pm, setRemind6pm] = useState(true);
-  const [warn10pm, setWarn10pm] = useState(true);
-  const [receipts, setReceipts] = useState(true);
+  const settings = me.status === "ready" ? me.data.settings : null;
+
+  // Flip immediately, save in the background, and put it back if the save fails.
+  const toggle = (key: ReminderKey) => async (value: boolean) => {
+    me.setData((d) => ({ ...d, settings: { ...d.settings, [key]: value } }));
+    try {
+      await api.updateMe({ [key]: value });
+    } catch {
+      me.setData((d) => ({ ...d, settings: { ...d.settings, [key]: !value } }));
+      Alert.alert("Couldn't save that", "Check your connection and try again.");
+    }
+  };
+
+  const confirmSignOut = () => {
+    Alert.alert("Sign out?", "Your commitments keep running while you're signed out.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: () => { signOut(); } },
+    ]);
+  };
+
+  const memberSince = session
+    ? new Date(session.user.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : "";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -60,7 +86,7 @@ export default function SettingsScreen() {
           <Section label="Payment">
             <SettingsRow
               label="Card"
-              value={`${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`}
+              value={me.status === "ready" ? cardLabel(me.data.paymentMethod) : ""}
               onPress={() => router.push("/payment")}
             />
             <SettingsRow
@@ -79,20 +105,20 @@ export default function SettingsScreen() {
             <ToggleRow
               label="Evening reminder"
               hint="6 pm on days you have something due"
-              value={remind6pm}
-              onChange={setRemind6pm}
+              value={settings?.remindEnabled ?? true}
+              onChange={toggle("remindEnabled")}
             />
             <ToggleRow
               label="Final warning"
               hint="10 pm, only if the day isn't marked done yet"
-              value={warn10pm}
-              onChange={setWarn10pm}
+              value={settings?.finalWarningEnabled ?? true}
+              onChange={toggle("finalWarningEnabled")}
             />
             <ToggleRow
               label="Charge receipts"
               hint="A notification whenever you're charged"
-              value={receipts}
-              onChange={setReceipts}
+              value={settings?.receiptsEnabled ?? true}
+              onChange={toggle("receiptsEnabled")}
               divider={false}
             />
           </Section>
@@ -100,9 +126,12 @@ export default function SettingsScreen() {
           <Gap size={space.xl} />
 
           <Section label="Account">
-            <InfoRow label="Signed in as" value={mockAccount.email} />
-            <InfoRow label="Member since" value={mockAccount.memberSince} />
-            <SettingsRow label="Time zone" value="America/New York" />
+            <InfoRow label="Signed in as" value={session?.user.email ?? ""} />
+            <InfoRow label="Member since" value={memberSince} />
+            <InfoRow
+              label="Time zone"
+              value={me.status === "ready" ? me.data.timezone.replace(/_/g, " ") : ""}
+            />
             <SettingsRow label="Export my data" divider={false} />
           </Section>
 
@@ -117,20 +146,13 @@ export default function SettingsScreen() {
           <Gap size={space.xl} />
 
           <Section>
-            <SettingsRow label="Sign out" onPress={() => router.replace("/sign-in")} divider={false} />
+            <SettingsRow label="Sign out" onPress={confirmSignOut} divider={false} />
           </Section>
 
           <Gap size={space.xl} />
 
           {SHOW_DEV_TOOLS && (
             <>
-              <Caption>Preview screens</Caption>
-              <Gap size={space.sm} />
-              <Section>
-                <SettingsRow label="Sign in" onPress={() => router.push("/sign-in")} />
-                <SettingsRow label="Onboarding" onPress={() => router.push("/onboarding")} divider={false} />
-              </Section>
-              <Gap size={space.lg} />
               <DataStatePills />
               <Gap size={space.lg} />
             </>

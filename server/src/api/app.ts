@@ -191,11 +191,41 @@ export function createApp(deps: Deps) {
     );
     const byId = new Map(commitments.map((cm) => [cm.id, commitmentView(cm)]));
 
+    // "This month" for each commitment due today: days so far (today
+    // included), days kept (a live mark counts), free passes used.
+    const todayIds = checkIns.filter((r) => r.due_date === localDate(r.timezone, now)).map((r) => r.commitment_id);
+    const { rows: months } = await deps.db.query<{
+      commitment_id: string; scheduled: number; completed: number; passes_used: number;
+    }>(
+      `select c.id as commitment_id,
+              count(ci.id)::int as scheduled,
+              count(ci.id) filter (where ci.status = 'verified'
+                or (ci.status = 'pending' and exists (
+                  select 1 from evidence e where e.check_in_id = ci.id and e.withdrawn_at is null)))::int as completed,
+              (select count(*)::int from free_pass_usage f
+                where f.commitment_id = c.id
+                  and f.month = date_trunc('month', ($2::timestamptz) at time zone c.timezone)::date) as passes_used
+         from commitments c
+         left join check_ins ci on ci.commitment_id = c.id
+          and ci.due_date >= date_trunc('month', ($2::timestamptz) at time zone c.timezone)::date
+          and ci.due_date <= (($2::timestamptz) at time zone c.timezone)::date
+        where c.id = any($1::uuid[])
+        group by c.id`,
+      [todayIds, now],
+    );
+    const monthById = new Map(months.map((m) => [m.commitment_id, {
+      completed: m.completed, scheduled: m.scheduled, passesUsed: m.passes_used,
+    }]));
+
     const items = checkIns.map((r) => {
       const today = localDate(r.timezone, now);
       return {
         isToday: r.due_date === today,
-        item: { checkIn: checkInView(r, today), commitment: byId.get(r.commitment_id)! },
+        item: {
+          checkIn: checkInView(r, today),
+          commitment: byId.get(r.commitment_id)!,
+          month: monthById.get(r.commitment_id) ?? null,
+        },
       };
     });
 

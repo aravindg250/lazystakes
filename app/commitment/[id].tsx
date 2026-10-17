@@ -9,7 +9,7 @@
  * then the dangerous buttons last, where they can't be hit by accident.
  */
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { View, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,22 +19,32 @@ import {
 } from "../../src/components/primitives";
 import { DetailSkeleton, ErrorState } from "../../src/components/states";
 import { DevFooter } from "../../src/dev/DevPanel";
-import { useMockQuery } from "../../src/dev/DevTools";
+import { useQuery } from "../../src/lib/query";
+import { api, cardLabel, ApiError } from "../../src/lib/api";
+import { groupByMonth } from "../../src/lib/history";
 import { haptics } from "../../src/lib/haptics";
 import { ScreenHeader, BackButton } from "../../src/components/chrome";
 import { DayStrip, StatRow, HistoryRow } from "../../src/components/commitment";
 import { useTheme, space } from "../../src/theme";
 import { formatSchedule } from "../../src/types";
-import {
-  mockCommitments, mockPaymentMethod, historyFor, statsFor, groupByMonth,
-} from "../../src/mock/data";
 
 export default function CommitmentDetailScreen() {
   const { c } = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const query = useMockQuery(() => mockCommitments.find((cm) => cm.id === id) ?? null);
+  // Not found comes back as a 404; show that as its own state, not an error.
+  const load = useCallback(async () => {
+    try {
+      const [detail, me] = await Promise.all([api.commitment(id), api.me()]);
+      return { detail, me };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  }, [id]);
+  const query = useQuery(load);
+  const [busy, setBusy] = useState(false);
 
   if (query.status !== "ready") {
     return (
@@ -55,9 +65,7 @@ export default function CommitmentDetailScreen() {
     );
   }
 
-  const commitment = query.data;
-
-  if (!commitment) {
+  if (!query.data) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
         <Screen>
@@ -68,9 +76,30 @@ export default function CommitmentDetailScreen() {
     );
   }
 
-  const stats = statsFor(commitment.id);
-  const months = groupByMonth(historyFor(commitment.id));
+  const { detail, me } = query.data;
+  const { commitment, stats } = detail;
+  const months = groupByMonth(detail.history);
   const paused = commitment.status === "paused";
+
+  const act = async (fn: () => Promise<unknown>, title: string, after?: () => void) => {
+    setBusy(true);
+    try {
+      await fn();
+      haptics.success();
+      if (after) after();
+      else await query.refresh();
+    } catch (e) {
+      haptics.warning();
+      Alert.alert(title, e instanceof ApiError ? e.message : "Something went wrong. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const togglePause = () => act(
+    () => (paused ? api.resume(commitment.id) : api.pause(commitment.id)),
+    paused ? "Couldn't resume" : "Couldn't pause",
+  );
 
   const confirmDelete = () => {
     haptics.warning();
@@ -79,7 +108,11 @@ export default function CommitmentDetailScreen() {
       "Your history stays and nothing new will be scheduled. If today is due, it still counts.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => router.back() },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => act(() => api.remove(commitment.id), "Couldn't delete", () => router.back()),
+        },
       ]
     );
   };
@@ -120,7 +153,7 @@ export default function CommitmentDetailScreen() {
           <Card>
             <DetailRow label="Proof" value="Honor system" first />
             <DetailRow label="Free passes" value={`${commitment.freePassesPerMonth} per month`} />
-            <DetailRow label="Card" value={`${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`} />
+            <DetailRow label="Card" value={cardLabel(me.paymentMethod)} />
           </Card>
 
           <Gap size={space.xl} />
@@ -154,17 +187,18 @@ export default function CommitmentDetailScreen() {
 
           <Button
             label={paused ? "Resume commitment" : "Pause commitment"}
-            onPress={() => {}}
+            disabled={busy}
+            onPress={togglePause}
           />
           <Gap size={space.sm} />
           <Caption style={{ textAlign: "center" }}>
             {paused
-              ? "Resuming starts from your next scheduled day."
-              : "Pausing takes effect on your next scheduled day, not today."}
+              ? "Resuming starts tomorrow at the earliest, never today."
+              : "Pausing takes effect after today. If today is due, it still counts."}
           </Caption>
 
           <Gap size={space.lg} />
-          <Button label="Delete commitment" variant="ghost" onPress={confirmDelete} />
+          <Button label="Delete commitment" variant="ghost" disabled={busy} onPress={confirmDelete} />
 
           <DevFooter />
         </ScrollView>

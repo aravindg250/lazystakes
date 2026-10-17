@@ -34,7 +34,7 @@ Phase 1 is complete apart from the layout rework, which is still being designed.
 | Postgres schema | Live on Supabase (`server/db/schema.sql`) |
 | Scheduler, API, and Stripe service | Live on Railway (`server/`), Stripe in test mode; /v1 closed until Phase 3 |
 | Phase 2 exit test against real Supabase + Stripe | Passed (2026-10-17) |
-| Auth | Server side done: token checks, accounts, RLS live on Supabase. Sign in with Apple in the app not started |
+| Auth | Email one-time-code sign-in in the app; server token checks, accounts, and RLS live. Sign in with Apple waits on a paid Apple Developer account |
 | Verification beyond honor system | Final phase — not started |
 
 ### Stack
@@ -430,7 +430,16 @@ Sign in with Apple, RLS policies on every table, and swap the mock imports for r
 - Bearer-token auth on every `/v1` route; the first signed-in request creates the account with the device's timezone (`x-timezone`, falling back to UTC).
 - Tests with real signed tokens and the real policies: expired, forged, wrong-issuer, wrong-audience, anon-role, and anonymous-user tokens are refused; one user can't see or change another's commitments; the public key reads nothing; signed-in sessions write nothing.
 
-**Remaining:** Apple Developer and Supabase Apple-provider setup, the sign-in screen, sending the token and timezone from the app, swapping `useMockQuery` for real calls, and push-token registration.
+**Built (app side):**
+
+- Sign-in with an emailed one-time code (Supabase Auth), decided 2026-10-17 because Sign in with Apple needs a paid Apple Developer account. Works in Expo Go. Apple is added alongside it in Phase 4, when the paid account is needed for development builds anyway.
+- Route guards (`Stack.Protected`): signed out sees only sign-in; a new account sees onboarding once; everything else needs both.
+- Every screen loads from the API through `useQuery` (reloads on focus, keeps loading/error states and the dev simulation). Mock data is gone.
+- Mark done, undo, create, pause, resume, delete, and the reminder toggles all go to the server. The phone's timezone is sent on every request and synced to the account for new commitments.
+- `/v1/today` now includes each commitment's month summary (days kept, days so far, free passes used).
+- Until card entry exists, `npm run test-card` gives a signed-in account Stripe's test Visa.
+
+**Remaining:** push-token registration (needs `expo-notifications` and an EAS project, so it moves to the first development build in Phase 4) and Sign in with Apple. Card required to create a commitment is still an open decision; today the app warns but allows it.
 
 ### Phase 4 — Real payments
 

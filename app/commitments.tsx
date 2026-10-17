@@ -18,23 +18,20 @@ import { CommitmentSummaryCard } from "../src/components/commitment";
 import { EmptyState } from "../src/components/CommitmentRow";
 import { SummaryCardsSkeleton, ErrorState } from "../src/components/states";
 import { DevFooter } from "../src/dev/DevPanel";
-import { useMockQuery } from "../src/dev/DevTools";
+import { useQuery } from "../src/lib/query";
+import { api } from "../src/lib/api";
 import { useTheme, space } from "../src/theme";
-import { mockCommitments, statsFor } from "../src/mock/data";
 
 export default function CommitmentsScreen() {
   const { c } = useTheme();
   const router = useRouter();
 
-  const query = useMockQuery(() => mockCommitments);
+  const query = useQuery(api.commitments);
 
-  const sorted = [...(query.data ?? [])].sort((a, b) => {
-    if (a.status === b.status) return 0;
-    return a.status === "active" ? -1 : 1;
-  });
-
-  const active = sorted.filter((x) => x.status === "active");
-  const paused = sorted.filter((x) => x.status !== "active");
+  // The server sends active first, newest first; archived ones never.
+  const all = query.data ?? [];
+  const active = all.filter((x) => x.commitment.status === "active");
+  const paused = all.filter((x) => x.commitment.status !== "active");
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
@@ -49,16 +46,16 @@ export default function CommitmentsScreen() {
             <SummaryCardsSkeleton />
           ) : query.status === "error" ? (
             <ErrorState onRetry={query.retry} />
-          ) : sorted.length === 0 ? (
+          ) : all.length === 0 ? (
             <EmptyState onCreate={() => router.push("/commitment/new")} />
           ) : (
             <>
-              {active.map((cm, i) => (
+              {active.map(({ commitment: cm, stats }, i) => (
                 <View key={cm.id}>
                   {i > 0 && <Gap size={space.md} />}
                   <CommitmentSummaryCard
                     commitment={cm}
-                    stats={statsFor(cm.id)}
+                    stats={stats}
                     onPress={() => router.push(`/commitment/${cm.id}`)}
                   />
                 </View>
@@ -69,12 +66,12 @@ export default function CommitmentsScreen() {
                   <Gap size={space.xl} />
                   <Caption>Paused</Caption>
                   <Gap size={space.sm} />
-                  {paused.map((cm, i) => (
+                  {paused.map(({ commitment: cm, stats }, i) => (
                     <View key={cm.id}>
                       {i > 0 && <Gap size={space.md} />}
                       <CommitmentSummaryCard
                         commitment={cm}
-                        stats={statsFor(cm.id)}
+                        stats={stats}
                         onPress={() => router.push(`/commitment/${cm.id}`)}
                       />
                     </View>

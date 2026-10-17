@@ -52,7 +52,7 @@ export function DevPills<T extends string>({
 
 const DATA_STATES: readonly DataState[] = ["ready", "loading", "error"];
 
-/** Simulate loading or error on every screen that uses useMockQuery. */
+/** Simulate loading or error on every screen that loads with useQuery. */
 export function DataStatePills() {
   const { dataState, setDataState } = useDev();
   return (

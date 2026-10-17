@@ -9,12 +9,15 @@
  * The third screen is the one people skip and the one that matters most.
  * Stating the cap and the free passes before anyone commits is what turns
  * an angry chargeback into a shrug.
+ *
+ * Shown once per account per device, right after the first sign-in.
+ * Finishing (or skipping) flips the route guard in app/_layout.tsx, which
+ * moves to Today on its own.
  */
 
 import React, { useState } from "react";
 import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 
 import {
@@ -22,6 +25,7 @@ import {
 } from "../src/components/primitives";
 import { useTheme, space, radius } from "../src/theme";
 import { formatMoney, MAX_STAKE_CENTS } from "../src/types";
+import { useAuth } from "../src/lib/auth";
 
 const CAP = formatMoney(MAX_STAKE_CENTS, false);
 
@@ -63,14 +67,14 @@ const STEPS: Step[] = [
 
 export default function OnboardingScreen() {
   const { c } = useTheme();
-  const router = useRouter();
+  const { finishOnboarding } = useAuth();
   const [step, setStep] = useState(0);
 
   const current = STEPS[step];
   const last = step === STEPS.length - 1;
 
   const next = () => {
-    if (last) router.replace("/");
+    if (last) finishOnboarding();
     else setStep((s) => s + 1);
   };
 
@@ -134,7 +138,7 @@ export default function OnboardingScreen() {
           {!last && (
             <>
               <Gap size={space.sm} />
-              <Button label="Skip" variant="ghost" onPress={() => router.replace("/")} />
+              <Button label="Skip" variant="ghost" onPress={finishOnboarding} />
             </>
           )}
         </View>

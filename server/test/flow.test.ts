@@ -307,6 +307,25 @@ describe("today endpoint", () => {
     expect(res.body.today[0].checkIn).toMatchObject({ dueDate: "2026-10-16", status: "pending", stakeCents: 500 });
     expect(res.body.today[0].commitment).toMatchObject({ title: "Go to the gym", scheduleDays: [4, 5, 6] });
     expect(res.body.upcoming.map((u: any) => u.checkIn.status)).toEqual(["upcoming"]);
+    expect(res.body.today[0].month).toEqual({ completed: 0, scheduled: 1, passesUsed: 0 });
+  });
+
+  it("counts this month's kept days, live marks, and free passes", async () => {
+    const id = await createGymCommitment([5, 6, 7]);
+    const [fri, sat] = await checkIns(id);
+
+    h.setNow("2026-10-16T14:00:00Z"); // Fri: mark done, shows straight away
+    await h.api(user, "POST", `/v1/check-ins/${fri!.id}/done`);
+    let res = await h.api(user, "GET", "/v1/today");
+    expect(res.body.today[0].month).toEqual({ completed: 1, scheduled: 1, passesUsed: 0 });
+
+    h.setNow("2026-10-18T14:00:00Z"); // Sun: Fri kept, Sat missed → free pass
+    await run.materialize();
+    await run.resolve();
+    res = await h.api(user, "GET", "/v1/today");
+    expect(res.body.today[0].checkIn.dueDate).toBe("2026-10-18");
+    expect(res.body.today[0].month).toEqual({ completed: 1, scheduled: 3, passesUsed: 1 });
+    expect(sat).toBeDefined();
   });
 });
 

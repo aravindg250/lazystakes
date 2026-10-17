@@ -3,13 +3,13 @@
  *
  * Answers one question: is anything due, and have I done it?
  *
- * The preview pills at the bottom only render when dev tools are on (see
- * src/dev/DevTools.tsx). Delete them and the `scenario` state once the
- * backend is wired up.
+ * One card per commitment due today. Marking done and undoing go straight
+ * to the server, which judges them against its own clock; the card shows
+ * whatever the server says the day now is.
  */
 
-import React, { useState } from "react";
-import { View, ScrollView } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -20,52 +20,46 @@ import {
   CommitmentRow, RowGroup, RestDayCard, EmptyState,
 } from "../src/components/CommitmentRow";
 import { TodaySkeleton, RowsSkeleton, ErrorState } from "../src/components/states";
-import { DevFooter, DevPills } from "../src/dev/DevPanel";
-import { useMockQuery } from "../src/dev/DevTools";
+import { DevFooter } from "../src/dev/DevPanel";
+import { useQuery } from "../src/lib/query";
+import { api, cardLabel, ApiError, type Me, type Today } from "../src/lib/api";
+import { haptics } from "../src/lib/haptics";
 import { useTheme, space } from "../src/theme";
-import {
-  mockCommitments, mockCheckIns, mockMonthSummary, mockPaymentMethod,
-} from "../src/mock/data";
 import type { CheckIn } from "../src/types";
 
-type Scenario = "pending" | "verified" | "missed" | "excused" | "rest" | "empty";
-const SCENARIOS: readonly Scenario[] = ["pending", "verified", "missed", "excused", "rest", "empty"];
-
-/** A plausible earlier-today time for the "verified" preview. */
-function earlierToday(): string {
-  const d = new Date();
-  d.setHours(18, 42, 0, 0);
-  return (d.getTime() < Date.now() ? d : new Date(Date.now() - 5 * 60_000)).toISOString();
-}
+const loadToday = async (): Promise<{ today: Today; me: Me }> => {
+  const [today, me] = await Promise.all([api.today(), api.me()]);
+  return { today, me };
+};
 
 export default function TodayScreen() {
   const { c } = useTheme();
   const router = useRouter();
-  const [scenario, setScenario] = useState<Scenario>("pending");
+  const query = useQuery(loadToday);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  // When the day was marked done, or null if it hasn't been. Local for now;
-  // in Phase 3 this becomes a POST, and undo a DELETE, against the check-in.
-  const [markedAt, setMarkedAt] = useState<string | null>(null);
+  const { setData, refresh } = query;
 
-  const query = useMockQuery(() => ({
-    commitment: mockCommitments[0],
-    today: mockCheckIns.find((ci) => ci.id === "ci-today")!,
-    upcoming: mockCheckIns.filter((ci) => ci.status === "upcoming"),
-  }));
-
-  const pickScenario = (s: Scenario) => {
-    setScenario(s);
-    setMarkedAt(s === "verified" ? earlierToday() : null);
-  };
-
-  const todayCheckIn = (base: CheckIn): CheckIn => {
-    if (scenario === "pending" || scenario === "verified") {
-      return markedAt
-        ? { ...base, status: "verified", evidence: { kind: "self_report", receivedAt: markedAt } }
-        : { ...base, status: "pending", evidence: null };
+  /** Mark or undo, then show the server's answer. */
+  const change = useCallback(async (checkInId: string, action: "done" | "undo") => {
+    setBusy(checkInId);
+    try {
+      const updated = await (action === "done" ? api.markDone(checkInId) : api.undo(checkInId));
+      if (action === "done") haptics.success();
+      setData((d) => ({
+        ...d,
+        today: { ...d.today, today: d.today.today.map((i) => (i.checkIn.id === checkInId ? { ...i, checkIn: updated } : i)) },
+      }));
+      refresh(); // pick up the month summary
+    } catch (e) {
+      haptics.warning();
+      const msg = e instanceof ApiError ? e.message : "Something went wrong. Try again.";
+      Alert.alert(action === "done" ? "Couldn't mark it done" : "Couldn't undo", msg);
+      refresh();
+    } finally {
+      setBusy(null);
     }
-    return { ...base, status: scenario as CheckIn["status"], evidence: null };
-  };
+  }, [setData, refresh]);
 
   const heading = new Date().toLocaleDateString(undefined, {
     weekday: "long", month: "long", day: "numeric",
@@ -107,44 +101,14 @@ export default function TodayScreen() {
           ) : query.status === "error" ? (
             <ErrorState onRetry={query.retry} />
           ) : (
-            <>
-              {scenario === "empty" ? (
-                <EmptyState onCreate={() => router.push("/commitment/new")} />
-              ) : scenario === "rest" ? (
-                <RestDayCard nextDue="Friday" />
-              ) : (
-                <TodayCard
-                  commitment={query.data.commitment}
-                  checkIn={todayCheckIn(query.data.today)}
-                  monthCompleted={mockMonthSummary.completed + (markedAt ? 1 : 0)}
-                  monthScheduled={mockMonthSummary.scheduled}
-                  passesUsed={mockMonthSummary.passesUsed}
-                  cardLabel={`${mockPaymentMethod.brand} ${mockPaymentMethod.last4}`}
-                  onMarkDone={() => setMarkedAt(new Date().toISOString())}
-                  onUndo={() => setMarkedAt(null)}
-                />
-              )}
-
-              {scenario !== "empty" && query.data.upcoming.length > 0 && (
-                <>
-                  <Gap size={space.xl} />
-                  <RowGroup title="Later this week">
-                    {query.data.upcoming.map((ci, i) => {
-                      const cm = mockCommitments.find((m) => m.id === ci.commitmentId)!;
-                      return (
-                        <CommitmentRow
-                          key={ci.id}
-                          commitment={cm}
-                          checkIn={ci}
-                          showDivider={i < query.data.upcoming.length - 1}
-                          onPress={() => router.push(`/commitment/${cm.id}`)}
-                        />
-                      );
-                    })}
-                  </RowGroup>
-                </>
-              )}
-            </>
+            <TodayContent
+              data={query.data}
+              busy={busy}
+              onMarkDone={(ci) => change(ci.id, "done")}
+              onUndo={(ci) => change(ci.id, "undo")}
+              onOpen={(id) => router.push(`/commitment/${id}`)}
+              onCreate={() => router.push("/commitment/new")}
+            />
           )}
 
           <Gap size={space.xl} />
@@ -153,16 +117,75 @@ export default function TodayScreen() {
             onPress={() => router.push("/commitment/new")}
           />
 
-          <DevFooter>
-            <DevPills
-              label="Today state"
-              options={SCENARIOS}
-              value={scenario}
-              onChange={pickScenario}
-            />
-          </DevFooter>
+          <DevFooter />
         </ScrollView>
       </Screen>
     </SafeAreaView>
+  );
+}
+
+function TodayContent({
+  data, busy, onMarkDone, onUndo, onOpen, onCreate,
+}: {
+  data: { today: Today; me: Me };
+  busy: string | null;
+  onMarkDone: (ci: CheckIn) => void;
+  onUndo: (ci: CheckIn) => void;
+  onOpen: (commitmentId: string) => void;
+  onCreate: () => void;
+}) {
+  const { today, upcoming } = data.today;
+  const card = cardLabel(data.me.paymentMethod, "your card");
+
+  if (today.length === 0 && upcoming.length === 0) {
+    return <EmptyState onCreate={onCreate} />;
+  }
+
+  const nextDue = upcoming[0]
+    ? new Date(upcoming[0].checkIn.deadlineAt).toLocaleDateString(undefined, { weekday: "long" })
+    : null;
+
+  return (
+    <>
+      {today.length === 0 ? (
+        <RestDayCard nextDue={nextDue} />
+      ) : (
+        today.map((item, i) => (
+          <View key={item.checkIn.id}>
+            {i > 0 && <Gap size={space.md} />}
+            <TodayCard
+              // Remount when the status changes, so the undo window and
+              // time-remaining footnote are re-read from the new state.
+              key={`${item.checkIn.id}-${item.checkIn.status}`}
+              commitment={item.commitment}
+              checkIn={item.checkIn}
+              monthCompleted={item.month?.completed ?? 0}
+              monthScheduled={item.month?.scheduled ?? 0}
+              passesUsed={item.month?.passesUsed ?? 0}
+              cardLabel={card}
+              onMarkDone={busy ? undefined : () => onMarkDone(item.checkIn)}
+              onUndo={busy ? undefined : () => onUndo(item.checkIn)}
+            />
+          </View>
+        ))
+      )}
+
+      {upcoming.length > 0 && (
+        <>
+          <Gap size={space.xl} />
+          <RowGroup title="Later this week">
+            {upcoming.map((item, i) => (
+              <CommitmentRow
+                key={item.checkIn.id}
+                commitment={item.commitment}
+                checkIn={item.checkIn}
+                showDivider={i < upcoming.length - 1}
+                onPress={() => onOpen(item.commitment.id)}
+              />
+            ))}
+          </RowGroup>
+        </>
+      )}
+    </>
   );
 }

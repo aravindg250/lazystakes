@@ -201,9 +201,15 @@ export function FieldGroup({
 // TextField
 // ---------------------------------------------------------------
 
+type PassThrough = Pick<
+  React.ComponentProps<typeof TextInput>,
+  | "keyboardType" | "autoCapitalize" | "autoComplete" | "autoCorrect" | "textContentType"
+  | "autoFocus" | "maxLength" | "returnKeyType" | "onSubmitEditing" | "editable"
+>;
+
 export function TextField({
-  value, onChangeText, placeholder,
-}: { value: string; onChangeText: (t: string) => void; placeholder?: string }) {
+  value, onChangeText, placeholder, ...rest
+}: { value: string; onChangeText: (t: string) => void; placeholder?: string } & PassThrough) {
   const { c } = useTheme();
   return (
     <TextInput
@@ -212,6 +218,7 @@ export function TextField({
       placeholder={placeholder}
       placeholderTextColor={c.textMuted}
       style={[type.body, { color: c.textPrimary, padding: 0, minHeight: 24 }]}
+      {...rest}
     />
   );
 }

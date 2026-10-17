@@ -14,7 +14,8 @@
     "job": "tsx scripts/run-job.ts",
     "seed": "tsx scripts/seed.ts",
     "exit-test": "tsx scripts/exit-test.ts",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "test-card": "tsx scripts/test-card.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",

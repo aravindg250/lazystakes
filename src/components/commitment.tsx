@@ -16,7 +16,7 @@ import {
   formatClockTime, formatMoney, formatSchedule, WEEKDAY_INITIALS,
   type Commitment, type CheckIn, type Weekday,
 } from "../types";
-import type { CommitmentStats } from "../mock/data";
+import type { CommitmentStats } from "../lib/api";
 
 const ALL_DAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 

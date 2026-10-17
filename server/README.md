@@ -32,6 +32,7 @@ npm run dev            # API + jobs locally, reads server/.env
 npm run build && npm start
 npm run migrate        # apply new db/migrations/*.sql to DATABASE_URL
 npm run seed           # test user + Stripe test card; prints the user id
+npm run test-card -- you@example.com   # give a signed-in account Stripe's test Visa
 npm run job -- resolve # run one job now: materialize | resolve | charge | notify
 npm run exit-test      # the Phase 2 exit test against real Supabase + Stripe test mode
 ```
