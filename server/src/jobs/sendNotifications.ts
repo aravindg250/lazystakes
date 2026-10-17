@@ -18,7 +18,7 @@
 
 import type { Deps } from "../deps";
 import { localTimeToUtc } from "../time";
-import { formatMoney } from "../../../src/types";
+import { formatMoney } from "../money";
 
 const REMINDER_LOCAL = "18:00";
 const FINAL_WARNING_LOCAL = "22:00";

@@ -24,7 +24,7 @@ import {
   CHECK_IN_COLUMNS, COMMITMENT_COLUMNS, checkInView, commitmentView,
   type CheckInRow, type CommitmentRow,
 } from "./views";
-import { MAX_STAKE_CENTS, MIN_STAKE_CENTS, formatMoney } from "../../../src/types";
+import { MAX_STAKE_CENTS, MIN_STAKE_CENTS, formatMoney } from "../money";
 
 type Env = { Variables: { userId: string } };
 
